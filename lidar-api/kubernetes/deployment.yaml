@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lidar-api
+  labels:
+    app: lidar-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lidar-api
+  template:
+    metadata:
+      labels:
+        app: lidar-api
+    spec:
+      containers:
+      - name: lidar-api
+        image: your-docker-image:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: ENV_VARIABLE_NAME
+          value: "your_value"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "500m"
+          limits:
+            memory: "512Mi"
+            cpu: "1"
+      restartPolicy: Always

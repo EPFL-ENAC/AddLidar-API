@@ -1,0 +1,17 @@
+# https://github.com/EPFL-ENAC/epfl-enac-build-push-deploy-action#readme
+name: deploy
+
+'on':
+  push:
+    branches:
+      - dev
+    tags: ['v*.*.*']
+
+jobs:
+  deploy:
+    uses: EPFL-ENAC/epfl-enac-build-push-deploy-action/.github/workflows/deploy.yml@v2.2.0
+    secrets:
+      token: ${{ secrets.CD_TOKEN }}
+    with:
+      org: epfl-cryos # your org
+      repo: addlidar-api # your app name, usual convention is name of your repository
