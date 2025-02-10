@@ -18,7 +18,18 @@ This API provides a RESTful interface for processing LiDAR point cloud data. Bui
 ### Development Setup
 1. Clone the repository
 2. Install dependencies: `make install` or `uv pip install -r requirements.txt`
-3. Run locally: `make run` or `uvicorn src.main:app --reload`
+3. Create a `.env` file: `cp .env.example .env` and adjust values as needed
+4. Run locally: `make run` or `uvicorn src.main:app --reload`
+
+### Environment Configuration
+Create a `.env` file in the root directory with the following variables:
+```bash
+ENVIRONMENT=development
+DOCKER_IMAGE=ghcr.io/epfl-enac/lidardatamanager:latest
+DOCKER_VOLUME=/path/to/your/data/folder
+API_PREFIX=/api
+PORT=8000
+```
 
 ### API Endpoints
 - `GET /process-point-cloud`: Process point cloud data with customizable parameters
