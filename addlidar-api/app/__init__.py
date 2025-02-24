@@ -1,3 +1,0 @@
-"""
-AddLidar API application package.
-"""
