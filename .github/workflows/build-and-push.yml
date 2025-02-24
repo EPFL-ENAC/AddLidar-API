@@ -15,4 +15,4 @@ jobs:
     with:
       org: epfl-cryos # your org
       repo: addlidar-api # your app name, usual convention is name of your repository
-      build_context: '["./addlidar-api"]'
+      build_context: '["./lidar-api"]'
