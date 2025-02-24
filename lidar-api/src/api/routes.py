@@ -25,3 +25,7 @@ async def process_point_cloud(request: ProcessPointCloudRequest):
     # Logic to process the point cloud using the Docker service
     # This is a placeholder for the actual implementation
     return {"message": "Processing point cloud", "file_path": request.file_path}
+
+@router.get("/health")
+async def health_check():
+    return {"status": "healthy"}
