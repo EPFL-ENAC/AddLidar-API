@@ -75,10 +75,7 @@ class PointCloudRequest(BaseModel):
         except ValueError:
             raise ValueError("File path must be within the mounted /data volume")
 
-        # # Check if file exists
-        if not v.is_file():
-            raise ValueError(f"File does not exist: {v}")
-            
+        # We don't check if file exist, since it may not exist yet because of docker volumes
         return v
 
     @field_validator('format')
