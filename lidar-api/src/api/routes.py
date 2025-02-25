@@ -5,6 +5,7 @@ import logging
 from fastapi.encoders import jsonable_encoder
 import subprocess
 from src.api.models import PointCloudRequest, ProcessPointCloudResponse
+from src.services.docker_service import process_point_cloud as docker_process_point_cloud
 
 router = APIRouter()
 logger = logging.getLogger("uvicorn")
@@ -45,17 +46,12 @@ async def process_point_cloud(
         logger.debug(f"Received PointCloudRequest: {jsonable_encoder(request)}")
         logger.debug(f"CLI arguments: {cli_args}")
 
-        # process = subprocess.run(['point_cloud_processor'] + cli_args, 
-        #                        capture_output=True, 
-        #                        text=True)
-        # if process.returncode != 0:
-        #     raise HTTPException(status_code=400, 
-        #                       detail=f"Processing failed: {process.stderr}")
+        # Process point cloud using docker service
+        output = docker_process_point_cloud(file_path='data', cli_args=cli_args)
         
-        # return {"status": "success", "output": process.stdout}
         return ProcessPointCloudResponse(
             status="success",
-            output="Processed point cloud data"
+            output=output
         )
     except ValidationError as e:
         logger.error(f"Validation error: {str(e)}")

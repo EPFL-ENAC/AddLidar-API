@@ -8,13 +8,7 @@ def run_lidar_cli(command_args: list[str]) -> str:
         return e.stderr.decode('utf-8')
 
 
-def process_point_cloud(file_path: str, **kwargs) -> str:
-    command_args = (
-        ["docker", "run", "-v", f"{file_path}:/data", "lidardatamanager"]
-    )
-
-    for key, value in kwargs.items():
-        if value is not None:
-            command_args.append(f"--{key}={value}")
-
+def process_point_cloud(file_path: str, cli_args: list[str]) -> str:
+    command_args = ["docker", "run", "-v", f"{file_path}:/data", "lidardatamanager"]
+    command_args.extend(cli_args)
     return run_lidar_cli(command_args)
