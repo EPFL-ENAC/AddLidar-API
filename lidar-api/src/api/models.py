@@ -64,16 +64,16 @@ class PointCloudRequest(BaseModel):
     def validate_file_exists(cls, v: Path) -> Path:
         # Convert to absolute path if relative
         if not v.is_absolute():
-            v = Path('./data') / v
+            v = Path('/data') / v
         else:
             # Prepend ./data to absolute paths
-            v = Path('./data') / v.relative_to('/')
+            v = Path('/data') / v.relative_to('/')
 
         # Ensure the path is within the /data directory for security
         try:
-            v.relative_to('./data')
+            v.relative_to('/data')
         except ValueError:
-            raise ValueError("File path must be within the mounted ./data volume")
+            raise ValueError("File path must be within the mounted /data volume")
 
         # Check if file exists
         if not v.is_file():
@@ -117,21 +117,21 @@ class PointCloudRequest(BaseModel):
         if self.remove_color:
             args.append('--remove_color')
         if self.format:
-            args.extend(['-f', self.format])
+            args.append(f'-f={self.format}')
         if self.line is not None:
-            args.extend(['-l', str(self.line)])
+            args.append(f'-l={self.line}')
         if self.returns is not None:
-            args.extend(['-r', str(self.returns)])
+            args.append(f'-r={self.returns}')
         if self.number is not None:
-            args.extend(['-n', str(self.number)])
+            args.append(f'-n={self.number}')
         if self.density is not None:
-            args.extend(['-d', str(self.density)])
+            args.append(f'-d={self.density}')
         if self.roi:
-            args.extend(['--roi', ','.join(map(str, self.roi))])
+            args.append(f'--roi={",".join(map(str, self.roi))}')
         if self.outcrs:
-            args.extend(['--outcrs', self.outcrs])
+            args.append(f'--outcrs={self.outcrs}')
         if self.incrs:
-            args.extend(['--incrs', self.incrs])
+            args.append(f'--incrs={self.incrs}')
             
         return args
 
@@ -140,11 +140,19 @@ class PointCloudRequest(BaseModel):
 class ProcessPointCloudResponse(BaseModel):
     status: str = Field(
         ...,
-        description="Status of the processing operation (success or failure)"
+        description="Status of the processing operation (success or error)"
     )
     output: str = Field(
         ...,
         description="Output of the processing operation"
+    )
+    error_type: Optional[str] = Field(
+        None,
+        description="Type of error if status is error"
+    )
+    error_details: Optional[dict] = Field(
+        None,
+        description="Detailed error information"
     )
 
     model_config = {
