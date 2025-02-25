@@ -11,7 +11,6 @@ router = APIRouter()
 logger = logging.getLogger("uvicorn")
 
 from src.config.settings import settings
-print(settings.DOCKER_VOLUME)
 
 @router.get("/process-point-cloud")
 async def process_point_cloud(
