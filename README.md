@@ -59,3 +59,7 @@ Run tests with: `make test` or `pytest`
 - [ ] Protect your branch if you're a pro user: https://github.com/EPFL-ENAC/AddLidar-API/settings/branches
 
 
+
+
+http://0.0.0.0:8000/process-point-cloud?file_path=%2FLiDAR%2F0001_Mission_Root%2F02_LAS_PCD%2Fall_grouped_high_veg_10th_point.las&outcrs=EPSG%3A4326&returns=10&format=lasv14
+
