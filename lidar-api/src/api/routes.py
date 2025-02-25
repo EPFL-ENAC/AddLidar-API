@@ -4,13 +4,16 @@ from pydantic import ValidationError
 import logging
 from fastapi.encoders import jsonable_encoder
 from src.api.models import PointCloudRequest, ProcessPointCloudResponse
-from src.services.docker_service import process_point_cloud as docker_process_point_cloud
+from src.services.docker_service import (
+    process_point_cloud as docker_process_point_cloud,
+)
 from src.services.parse_docker_error import parse_cli_error, to_json, to_html
 
 router = APIRouter()
 logger = logging.getLogger("uvicorn")
 
 from src.config.settings import settings
+
 
 @router.get("/process-point-cloud")
 async def process_point_cloud(
@@ -25,7 +28,7 @@ async def process_point_cloud(
     density: float | None = None,
     roi: str | None = None,
     outcrs: str | None = None,
-    incrs: str | None = None
+    incrs: str | None = None,
 ) -> Response:
     try:
         # Convert query params to PointCloudRequest model
@@ -41,29 +44,35 @@ async def process_point_cloud(
             density=density,
             roi=tuple(map(float, roi.split(","))) if roi else None,
             outcrs=outcrs,
-            incrs=incrs
+            incrs=incrs,
         )
-        
+
         cli_args = request.to_cli_arguments()
         logger.debug(f"CLI arguments: {cli_args}")
 
         # Process point cloud using docker service
-        output, exit_code = docker_process_point_cloud(file_path=settings.DOCKER_VOLUME, cli_args=cli_args)
-        
+        output, exit_code = docker_process_point_cloud(
+            file_path=settings.DOCKER_VOLUME, cli_args=cli_args
+        )
+
         # If exit code is 0, return the binary data
         if exit_code == 0:
             # Try to determine content type based on format
             content_type = "application/octet-stream"
             if format:
                 if format.lower() in ["pcd-ascii", "pcd-binary"]:
-                    content_type = "text/plain" if format == "pcd-ascii" else "application/octet-stream"
+                    content_type = (
+                        "text/plain"
+                        if format == "pcd-ascii"
+                        else "application/octet-stream"
+                    )
                 elif format.lower() in ["lasv14", "las"]:
                     content_type = "application/octet-stream"
-            
+
             return Response(content=output, media_type=content_type)
-        
+
         # If there was an error, return JSON response
-        error_message = output.decode('utf-8', errors='replace')
+        error_message = output.decode("utf-8", errors="replace")
         return JSONResponse(
             status_code=400,
             content=ProcessPointCloudResponse(
@@ -72,10 +81,10 @@ async def process_point_cloud(
                 error_details={
                     "message": error_message,
                     "cli_args": cli_args,
-                    "exit_code": exit_code
+                    "exit_code": exit_code,
                 },
-                output=error_message
-            ).dict()
+                output=error_message,
+            ).dict(),
         )
 
     except ValidationError as e:
@@ -86,8 +95,8 @@ async def process_point_cloud(
                 status="error",
                 output=str(e),
                 error_type="validation_error",
-                error_details={"errors": jsonable_encoder(e.errors())}
-            ).dict()
+                error_details={"errors": jsonable_encoder(e.errors())},
+            ).dict(),
         )
     except ValueError as e:
         logger.error(f"Value error: {str(e)}")
@@ -97,8 +106,8 @@ async def process_point_cloud(
                 status="error",
                 output=str(e),
                 error_type="value_error",
-                error_details={"message": str(e)}
-            ).dict()
+                error_details={"message": str(e)},
+            ).dict(),
         )
     except Exception as e:
         logger.error(f"Unexpected error: {str(e)}")
@@ -108,9 +117,10 @@ async def process_point_cloud(
                 status="error",
                 output=str(e),
                 error_type="internal_error",
-                error_details={"message": "An unexpected error occurred"}
-            ).dict()
+                error_details={"message": "An unexpected error occurred"},
+            ).dict(),
         )
+
 
 @router.get("/health")
 async def health_check() -> dict:

@@ -5,14 +5,15 @@ from pydantic import ValidationError
 
 app = FastAPI()
 
+
 @app.exception_handler(ValidationError)
 async def validation_exception_handler(request: Request, exc: ValidationError):
     return JSONResponse(
         status_code=422,
         content={
             "detail": exc.errors(),
-            "body": exc.model.model_dump() if exc.model else None
-        }
+            "body": exc.model.model_dump() if exc.model else None,
+        },
     )
 
 

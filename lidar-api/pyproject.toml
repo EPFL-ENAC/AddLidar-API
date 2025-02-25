@@ -18,6 +18,8 @@ dependencies = [
 dev = [
     "pytest-mock>=3.14.0",
     "pytest>=8.3.4",
+    "flake8>=7.1.2",
+    "black>=25.1.0",
 ]
 
 [dependency-groups]
