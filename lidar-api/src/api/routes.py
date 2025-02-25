@@ -3,13 +3,15 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 import logging
 from fastapi.encoders import jsonable_encoder
-import subprocess
 from src.api.models import PointCloudRequest, ProcessPointCloudResponse
 from src.services.docker_service import process_point_cloud as docker_process_point_cloud
 from src.services.parse_docker_error import parse_cli_error, to_json, to_html
 
 router = APIRouter()
 logger = logging.getLogger("uvicorn")
+
+from src.config.settings import settings
+print(settings.data_root)
 
 @router.get("/process-point-cloud")
 async def process_point_cloud(
@@ -44,47 +46,47 @@ async def process_point_cloud(
         )
         
         cli_args = request.to_cli_arguments()
-        logger.debug(f"Received PointCloudRequest: {jsonable_encoder(request)}")
+        # logger.debug(f"Received PointCloudRequest: {jsonable_encoder(request)}")
         logger.debug(f"CLI arguments: {cli_args}")
 
         # Process point cloud using docker service
-        output = docker_process_point_cloud(file_path='data', cli_args=cli_args)
+        # output = docker_process_point_cloud(file_path='./data', cli_args=cli_args)
         
         # Check for CLI parser errors
-        if "PARSE ERROR:" in output or "Brief USAGE:" in output:
-            parsed_data = parse_cli_error(output)
-            json_output = to_json(parsed_data)
-            # Extract the specific error message and clean it up
-            error_message = parsed_data.get("error_message", "Unknown parser error")
-            if isinstance(error_message, str):
-                error_message = error_message.replace("PARSE ERROR: ", "").strip()
+        # if "PARSE ERROR:" in output or "Brief USAGE:" in output:
+        #     parsed_data = parse_cli_error(output)
+        #     json_output = to_json(parsed_data)
+        #     # Extract the specific error message and clean it up
+        #     error_message = parsed_data.get("error_message", "Unknown parser error")
+        #     if isinstance(error_message, str):
+        #         error_message = error_message.replace("PARSE ERROR: ", "").strip()
             
-            # Get the usage example for the specific flag if available
-            usage_info = parsed_data.get("usage", "").strip()
-            arguments_info = parsed_data.get("arguments", [])
+        #     # Get the usage example for the specific flag if available
+        #     usage_info = parsed_data.get("usage", "").strip()
+        #     arguments_info = parsed_data.get("arguments", [])
             
-            return ProcessPointCloudResponse(
-                status="error",
-                error_type="cli_parser_error",
-                error_details={
-                    "message": error_message,
-                    "cli_args": cli_args,
-                    # "usage": usage_info,
-                    "available_arguments": [
-                        {
-                            "flag": arg["flag"],
-                            "description": arg["description"]
-                        }
-                        for arg in arguments_info
-                    ],
-                    "help_text": parsed_data.get("help_text", "")
-                },
-                output="CLI ERROR",#output,
-            )
+        #     return ProcessPointCloudResponse(
+        #         status="error",
+        #         error_type="cli_parser_error",
+        #         error_details={
+        #             "message": error_message,
+        #             "cli_args": cli_args,
+        #             # "usage": usage_info,
+        #             "available_arguments": [
+        #                 {
+        #                     "flag": arg["flag"],
+        #                     "description": arg["description"]
+        #                 }
+        #                 for arg in arguments_info
+        #             ],
+        #             "help_text": parsed_data.get("help_text", "")
+        #         },
+        #         output="CLI ERROR",#output,
+        #     )
 
         return ProcessPointCloudResponse(
             status="success",
-            output=output
+            output="different_success"
         )
     except ValidationError as e:
         logger.error(f"Validation error: {str(e)}")
@@ -92,7 +94,7 @@ async def process_point_cloud(
             status="error",
             output=str(e),
             error_type="validation_error",
-            error_details={"errors": e.errors()}
+            error_details={"errors": jsonable_encoder(e.errors())}
         )
     except ValueError as e:
         logger.error(f"Value error: {str(e)}")

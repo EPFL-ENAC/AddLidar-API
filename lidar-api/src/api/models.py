@@ -69,13 +69,13 @@ class PointCloudRequest(BaseModel):
             # Prepend ./data to absolute paths
             v = Path('/data') / v.relative_to('/')
 
-        # Ensure the path is within the /data directory for security
+        # # Ensure the path is within the /data directory for security
         try:
             v.relative_to('/data')
         except ValueError:
             raise ValueError("File path must be within the mounted /data volume")
 
-        # Check if file exists
+        # # Check if file exists
         if not v.is_file():
             raise ValueError(f"File does not exist: {v}")
             
