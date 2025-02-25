@@ -1,4 +1,3 @@
-from pydantic import BaseModel
 from typing import Optional, List
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Tuple
@@ -63,8 +62,23 @@ class PointCloudRequest(BaseModel):
     @field_validator('file_path')
     @classmethod
     def validate_file_exists(cls, v: Path) -> Path:
-        if not v.exists():
-            raise ValueError(f"File {v} does not exist")
+        # Convert to absolute path if relative
+        if not v.is_absolute():
+            v = Path('./data') / v
+        else:
+            # Prepend ./data to absolute paths
+            v = Path('./data') / v.relative_to('/')
+
+        # Ensure the path is within the /data directory for security
+        try:
+            v.relative_to('./data')
+        except ValueError:
+            raise ValueError("File path must be within the mounted ./data volume")
+
+        # Check if file exists
+        if not v.is_file():
+            raise ValueError(f"File does not exist: {v}")
+            
         return v
 
     @field_validator('format')
@@ -126,11 +140,18 @@ class PointCloudRequest(BaseModel):
 class ProcessPointCloudResponse(BaseModel):
     status: str = Field(
         ...,
-        description="Status of the processing operation (success or failure)",
-        example="success"
+        description="Status of the processing operation (success or failure)"
     )
     output: str = Field(
         ...,
-        description="Output of the processing operation",
-        example="Processed point cloud data"
+        description="Output of the processing operation"
     )
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [{
+                "status": "success",
+                "output": "Processed point cloud data"
+            }]
+        }
+    }

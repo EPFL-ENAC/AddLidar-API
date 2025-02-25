@@ -28,7 +28,7 @@ lint:
 	flake8 .
 
 test:
-	pytest
+	uv run pytest
 
 scout:
 	docker scout cves local://lidar-api:latest
