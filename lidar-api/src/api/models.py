@@ -1,6 +1,5 @@
-from typing import Optional, List
-from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Tuple
+from pydantic import BaseModel, Field, field_validator
 from pathlib import Path
 
 
@@ -79,33 +78,41 @@ class PointCloudRequest(BaseModel):
             raise ValueError("CRS must be in EPSG format (e.g., EPSG:4326)")
         return v
 
+    def _add_flag_arg(self, args: List[str], condition: bool, flag: str) -> None:
+        """Add a simple flag argument if condition is True"""
+        if condition:
+            args.append(flag)
+
+    def _add_value_arg(self, args: List[str], value: Optional[any], flag: str) -> None:
+        """Add a flag with value if value is not None"""
+        if value is not None:
+            args.append(f"{flag}={value}")
+
     def to_cli_arguments(self) -> List[str]:
         """Convert the model to CLI arguments"""
         args = [str(self.file_path)]
 
+        # Handle attribute removals
         if self.remove_attribute:
             for attr in self.remove_attribute:
                 args.extend(["--remove_attribute", attr])
-        if self.remove_all_attributes:
-            args.append("--remove_all_attributes")
-        if self.remove_color:
-            args.append("--remove_color")
-        if self.format:
-            args.append(f"-f={self.format}")
-        if self.line is not None:
-            args.append(f"-l={self.line}")
-        if self.returns is not None:
-            args.append(f"-r={self.returns}")
-        if self.number is not None:
-            args.append(f"-n={self.number}")
-        if self.density is not None:
-            args.append(f"-d={self.density}")
+
+        # Add simple flags
+        self._add_flag_arg(args, self.remove_all_attributes, "--remove_all_attributes")
+        self._add_flag_arg(args, self.remove_color, "--remove_color")
+
+        # Add value arguments
+        self._add_value_arg(args, self.format, "-f")
+        self._add_value_arg(args, self.line, "-l")
+        self._add_value_arg(args, self.returns, "-r")
+        self._add_value_arg(args, self.number, "-n")
+        self._add_value_arg(args, self.density, "-d")
+        self._add_value_arg(args, self.outcrs, "--outcrs")
+        self._add_value_arg(args, self.incrs, "--incrs")
+
+        # Handle ROI separately
         if self.roi:
             args.append(f'--roi={",".join(map(str, self.roi))}')
-        if self.outcrs:
-            args.append(f"--outcrs={self.outcrs}")
-        if self.incrs:
-            args.append(f"--incrs={self.incrs}")
 
         return args
 

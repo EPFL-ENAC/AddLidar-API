@@ -7,5 +7,49 @@ services:
       - "8081:8081"
     environment:
       - ENV=development
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
     volumes:
       - ./data:/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      redis:
+        condition: service_started
+    networks:
+      - lidar_network
+
+  celery-worker:
+    build:
+      context: ./celery-worker/
+      dockerfile: Dockerfile
+    volumes:
+      - ./data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock  # Allow worker to create sibling containers
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - HOST_DATA_DIR=/app/data
+      - IMAGE_NAME=ghcr.io/epfl-enac/lidardatamanager
+      - IMAGE_TAG=latest
+    depends_on:
+      redis:
+        condition: service_started
+    command: uv run celery -A celery_worker worker --loglevel=info
+    networks:
+      - lidar_network
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - lidar_network
+
+networks:
+  lidar_network:
+    driver: bridge

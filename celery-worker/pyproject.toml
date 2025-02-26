@@ -1,0 +1,20 @@
+[project]
+name = "celery-worker"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11.5"
+dependencies = [
+    "celery>=5.4.0",
+    "docker>=7.1.0",
+    "pytest-mock>=3.14.0",
+    "pytest>=8.3.4",
+    "redis>=5.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.black]
+line-length = 88
+target-version = ["py311"]

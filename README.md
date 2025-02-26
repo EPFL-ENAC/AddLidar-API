@@ -25,8 +25,9 @@ This API provides a RESTful interface for processing LiDAR point cloud data. Bui
 Create a `.env` file in the root directory with the following variables:
 ```bash
 ENVIRONMENT=development
-DOCKER_IMAGE=ghcr.io/epfl-enac/lidardatamanager:latest
-DOCKER_VOLUME=/path/to/your/data/folder
+IMAGE_NAME=ghcr.io/epfl-enac/lidardatamanager
+IMAGE_TAG=latest
+ROOT_VOLUME=/path/to/your/data/folder
 API_PREFIX=/api
 PORT=8000
 ```
