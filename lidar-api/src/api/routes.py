@@ -178,12 +178,44 @@ class JobResponse(BaseModel):
     result: Optional[Dict[str, Any]] = None
 
 
-@router.post("/jobs", response_model=JobResponse)
-async def create_processing_job(request: ProcessRequest):
+@router.get("/jobs", response_model=JobResponse)
+async def create_processing_job(
+    file_path: str,
+    remove_attribute: list[str] | None = None,
+    remove_all_attributes: bool = False,
+    remove_color: bool = False,
+    format: str | None = None,
+    line: int | None = None,
+    returns: int | None = None,
+    number: int | None = None,
+    density: float | None = None,
+    roi: str | None = None,
+    outcrs: str | None = None,
+    incrs: str | None = None,
+):
     """Start an asynchronous processing job using Celery"""
     # Generate a unique job ID
     job_id = str(uuid.uuid4())
     
+    # Convert query params to PointCloudRequest model
+    request = PointCloudRequest(
+        file_path=file_path,
+        remove_attribute=remove_attribute,
+        remove_all_attributes=remove_all_attributes,
+        remove_color=remove_color,
+        format=format,
+        line=line,
+        returns=returns,
+        number=number,
+        density=density,
+        roi=tuple(map(float, roi.split(","))) if roi else None,
+        outcrs=outcrs,
+        incrs=incrs,
+    )
+
+    cli_args = request.to_cli_arguments()
+    logger.debug(f"CLI arguments: {cli_args}")
+
     # Submit the job to Celery
     task = celery_app.send_task(
         "process_lidar_data",
@@ -195,8 +227,8 @@ async def create_processing_job(request: ProcessRequest):
     JOBS_STORE[job_id] = {
         "task_id": task.id,
         "status": "PENDING",
-        "input_file": request.input_file,
-        "parameters": request.parameters,
+        "input_file": file_path,
+        "parameters": cli_args,
         "created_at": time.time(),
         "output_file": None,
     }
