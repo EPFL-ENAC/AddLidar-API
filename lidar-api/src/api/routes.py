@@ -52,7 +52,7 @@ async def process_point_cloud(
 
         # Process point cloud using docker service
         output, exit_code = docker_process_point_cloud(
-            file_path=settings.DOCKER_VOLUME, cli_args=cli_args
+            file_path=settings.ROOT_VOLUME, cli_args=cli_args
         )
 
         # If exit code is 0, return the binary data

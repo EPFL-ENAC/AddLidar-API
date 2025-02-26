@@ -9,3 +9,4 @@ services:
       - ENV=development
     volumes:
       - ./data:/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro 

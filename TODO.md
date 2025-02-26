@@ -19,3 +19,10 @@ async def async_download_file():
 ```
 
 3) make the API a job api
+
+
+- http://0.0.0.0:8000/process-point-cloud?file_path=%2FLiDAR%2F0001_Mission_Root%2F02_LAS_PCD%2Fall_grouped_high_veg_10th_point.las&outcrs=EPSG%3A4326&format=pcd-ascii
+
+-https://addlidar-potree-dev.epfl.ch/api/process-point-cloud?file_path=%2FLiDAR%2F0001_Mission_Root%2F02_LAS_PCD%2Fall_grouped_high_veg_10th_point.las&outcrs=EPSG%3A4326&format=pcd-ascii
+
+- http://localhost:8081/process-point-cloud?file_path=%2FLiDAR%2F0001_Mission_Root%2F02_LAS_PCD%2Fall_grouped_high_veg_10th_point.las&outcrs=EPSG%3A4326&format=pcd-ascii

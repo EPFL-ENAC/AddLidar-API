@@ -19,6 +19,20 @@ def run_lidar_cli(command_args: list[str]) -> tuple[bytes, int]:
 
 
 def process_point_cloud(file_path: str, cli_args: list[str]) -> tuple[bytes, int]:
-    command_args = ["docker", "run", "-v", f"{file_path}:/data", settings.DOCKER_IMAGE]
+    command_args = [f"{file_path}:/data"]
     command_args.extend(cli_args)
+    import docker
+    client = docker.from_env()
+    client.login(username=settings.GH_USERNAME, password=settings.GH_PAT, registry=settings.REGISTRY)
+    client.images.pull(setttings.IMAGE_NAME, tag=settings.IMAGE_TAG)
+    output = client.containers.run(
+        setttings.IMAGE_NAME,
+        command_args,
+        volumes={
+            f"{setttings.ROOT_VOLUME}": {"bind": "/data", "mode": "ro"},
+        },
+        network="enac-cd-app_default",
+    )
+    output = output.decode("utf-8")
+    print(output, flush=True)
     return run_lidar_cli(command_args)
