@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse, Response, FileResponse
 from pydantic import ValidationError, BaseModel
 import logging
+import tempfile
 import os
 import uuid
 from typing import Dict, Optional, Any, List
@@ -30,6 +31,7 @@ celery_app = Celery(
 
 @router.get("/process-point-cloud")
 async def process_point_cloud(
+    background_tasks: BackgroundTasks,
     file_path: str,
     remove_attribute: list[str] | None = None,
     remove_all_attributes: bool = False,
@@ -70,18 +72,41 @@ async def process_point_cloud(
         # If exit code is 0, return the binary data
         if exit_code == 0:
             # Try to determine content type based on format
+            file_extension = ".bin"
             content_type = "application/octet-stream"
             if format:
                 if format.lower() in ["pcd-ascii", "pcd-binary"]:
-                    content_type = (
-                        "text/plain"
-                        if format == "pcd-ascii"
-                        else "application/octet-stream"
-                    )
+                    content_type = "text/plain" if format == "pcd-ascii" else "application/octet-stream"
+                    file_extension = ".pcd"
                 elif format.lower() in ["lasv14", "las"]:
                     content_type = "application/octet-stream"
+                    file_extension = ".las"
 
-            return Response(content=output, media_type=content_type)
+            
+            # Create a temporary file to store the output
+            temp_dir = tempfile.gettempdir()
+            file_name = f"processed_pointcloud_{uuid.uuid4()}{file_extension}"
+            temp_file_path = os.path.join(temp_dir, file_name)
+            
+            # Write the binary data to the temporary file
+            with open(temp_file_path, "wb") as f:
+                f.write(output)
+            
+
+          # Add cleanup task to delete the temporary file after response is sent
+            def remove_temp_file(file_path: str) -> None:
+                try:
+                    os.unlink(file_path)
+                except Exception as e:
+                    logger.error(f"Error deleting temporary file {file_path}: {str(e)}")
+                    
+            background_tasks.add_task(remove_temp_file, temp_file_path)
+            
+            return FileResponse(
+                path=temp_file_path,
+                media_type=content_type,
+                filename=file_name
+            )
 
         # If there was an error, return JSON response
         error_message = output.decode("utf-8", errors="replace")
