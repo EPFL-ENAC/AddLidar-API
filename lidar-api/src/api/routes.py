@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter
 from fastapi.responses import JSONResponse, Response
 from pydantic import ValidationError
 import logging
@@ -7,12 +7,10 @@ from src.api.models import PointCloudRequest, ProcessPointCloudResponse
 from src.services.docker_service import (
     process_point_cloud as docker_process_point_cloud,
 )
-from src.services.parse_docker_error import parse_cli_error, to_json, to_html
+from src.config.settings import settings
 
 router = APIRouter()
 logger = logging.getLogger("uvicorn")
-
-from src.config.settings import settings
 
 
 @router.get("/process-point-cloud")

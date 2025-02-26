@@ -22,14 +22,19 @@ def process_point_cloud(file_path: str, cli_args: list[str]) -> tuple[bytes, int
     command_args = [f"{file_path}:/data"]
     command_args.extend(cli_args)
     import docker
+
     client = docker.from_env()
-    client.login(username=settings.GH_USERNAME, password=settings.GH_PAT, registry=settings.REGISTRY)
-    client.images.pull(setttings.IMAGE_NAME, tag=settings.IMAGE_TAG)
+    client.login(
+        username=settings.GH_USERNAME,
+        password=settings.GH_PAT,
+        registry=settings.REGISTRY,
+    )
+    client.images.pull(settings.IMAGE_NAME, tag=settings.IMAGE_TAG)
     output = client.containers.run(
-        setttings.IMAGE_NAME,
+        settings.IMAGE_NAME,
         command_args,
         volumes={
-            f"{setttings.ROOT_VOLUME}": {"bind": "/data", "mode": "ro"},
+            f"{settings.ROOT_VOLUME}": {"bind": "/data", "mode": "ro"},
         },
         network="enac-cd-app_default",
     )
