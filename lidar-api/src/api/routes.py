@@ -15,6 +15,7 @@ from src.services.docker_service import (
 from src.config.settings import settings
 from celery.result import AsyncResult
 from celery import Celery
+from src.services.parse_docker_error import parse_cli_error, to_json
 
 router = APIRouter()
 logger = logging.getLogger("uvicorn")
@@ -63,8 +64,7 @@ async def process_point_cloud(
         logger.debug(f"CLI arguments: {cli_args}")
 
         # Process point cloud using docker service
-        output, exit_code = docker_process_point_cloud(
-            file_path=settings.ROOT_VOLUME, cli_args=cli_args
+        output, exit_code = docker_process_point_cloud(cli_args=cli_args
         )
 
         # If exit code is 0, return the binary data
@@ -85,17 +85,18 @@ async def process_point_cloud(
 
         # If there was an error, return JSON response
         error_message = output.decode("utf-8", errors="replace")
+        message = parse_cli_error(error_message)
         return JSONResponse(
             status_code=400,
             content=ProcessPointCloudResponse(
                 status="error",
                 error_type="cli_error",
                 error_details={
-                    "message": error_message,
+                    "message": message,
                     "cli_args": cli_args,
                     "exit_code": exit_code,
                 },
-                output=error_message,
+                output="",
             ).model_dump(),
         )
 
