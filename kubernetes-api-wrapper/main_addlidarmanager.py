@@ -11,12 +11,10 @@ logger = logging.getLogger(__name__)
 DEFAULT_SETTINGS: Dict[str, Any] = {
     "IMAGE_NAME": "ghcr.io/epfl-enac/lidardatamanager",
     "IMAGE_TAG": "latest",
-    "ROOT_VOLUME": "",  # No default, will be set based on STORAGE_TYPE
+    "ROOT_VOLUME": "",  # Will be set based on PVC
     "NAMESPACE": "default",
     "MOUNT_PATH": "/data",
-    "STORAGE_TYPE": "emptyDir",  # Options: "pvc", "emptyDir", "hostPath", "none"
-    "PVC_NAME": "",              # Only used if STORAGE_TYPE is "pvc"
-    "HOST_PATH": "",             # Only used if STORAGE_TYPE is "hostPath"
+    "PVC_NAME": "lidar-data-pvc",  # Default to our created PVC
     "JOB_TIMEOUT": 300           # Timeout in seconds for job completion
 }
 
@@ -39,13 +37,9 @@ def get_settings() -> Dict[str, Any]:
             else:
                 settings[key] = env_val
 
-    # Set ROOT_VOLUME based on storage type if not explicitly provided
+    # Set ROOT_VOLUME based on PVC
     if not settings["ROOT_VOLUME"]:
-        if settings["STORAGE_TYPE"] == "hostPath" and settings["HOST_PATH"]:
-            settings["ROOT_VOLUME"] = settings["HOST_PATH"]
-        else:
-            # Default for local development
-            settings["ROOT_VOLUME"] = "/Users/pierreguilbert/Works/git/github/EPFL-ENAC/AddLidar-API/lidar-api/data"
+        settings["ROOT_VOLUME"] = f"pvc:{settings['PVC_NAME']}"
                 
     return settings
 
@@ -94,71 +88,23 @@ def process_point_cloud(cli_args: List[str]) -> Tuple[bytes, int, Optional[str]]
         batch_v1 = client.BatchV1Api()
         core_v1 = client.CoreV1Api()
         
-        # Define volume and volume mounts based on storage type
-        volumes = []
-        volume_mounts = []
-        
-        if settings["STORAGE_TYPE"] == "pvc":
-            if not settings["PVC_NAME"]:
-                logger.warning("PVC storage type selected but PVC_NAME is empty, falling back to emptyDir")
-                settings["STORAGE_TYPE"] = "emptyDir"
-            else:
-                volumes.append(
-                    client.V1Volume(
-                        name="lidar-data-volume",
-                        persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(
-                            claim_name=settings["PVC_NAME"]
-                        )
-                    )
-                )
-                volume_mounts.append(
-                    client.V1VolumeMount(
-                        name="lidar-data-volume",
-                        mount_path=settings["MOUNT_PATH"]
-                    )
-                )
-                logger.info(f"Using PVC: {settings['PVC_NAME']}")
-                
-        if settings["STORAGE_TYPE"] == "hostPath":
-            if not settings["HOST_PATH"]:
-                logger.warning("hostPath storage type selected but HOST_PATH is empty, falling back to emptyDir")
-                settings["STORAGE_TYPE"] = "emptyDir"
-            else:
-                volumes.append(
-                    client.V1Volume(
-                        name="lidar-data-volume",
-                        host_path=client.V1HostPathVolumeSource(
-                            path=settings["HOST_PATH"]
-                        )
-                    )
-                )
-                volume_mounts.append(
-                    client.V1VolumeMount(
-                        name="lidar-data-volume",
-                        mount_path=settings["MOUNT_PATH"]
-                    )
-                )
-                logger.info(f"Using hostPath: {settings['HOST_PATH']}")
-                
-        if settings["STORAGE_TYPE"] == "emptyDir":
-            volumes.append(
-                client.V1Volume(
-                    name="lidar-data-volume",
-                    empty_dir=client.V1EmptyDirVolumeSource()
+        # Define volume and volume mounts for PVC
+        volumes = [
+            client.V1Volume(
+                name="data-volume",
+                persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(
+                    claim_name=settings["PVC_NAME"]
                 )
             )
-            volume_mounts.append(
-                client.V1VolumeMount(
-                    name="lidar-data-volume",
-                    mount_path=settings["MOUNT_PATH"]
-                )
+        ]
+        volume_mounts = [
+            client.V1VolumeMount(
+                name="data-volume",
+                mount_path=settings["MOUNT_PATH"]
             )
-            logger.info("Using emptyDir for temporary storage")
+        ]
+        logger.info(f"Using PVC: {settings['PVC_NAME']}")
         
-        # If storage type is "none", no volumes will be added
-        if settings["STORAGE_TYPE"] == "none":
-            logger.info("Running without volumes")
-            
         # Define job container
         container = client.V1Container(
             name="lidar-container",
@@ -266,10 +212,11 @@ def process_point_cloud(cli_args: List[str]) -> Tuple[bytes, int, Optional[str]]
 def example_usage() -> None:
     """
     Example function showing how to use the process_point_cloud function.
+    Note: When using PVC, paths should be relative to the mount point
     """
-    # Example CLI arguments for LidarDataManager
+    # Example CLI arguments for LidarDataManager - each argument must be a separate list item
     cli_args = [
-        "/data/LiDAR/0001_Mission_Root/02_LAS_PCD/small_test_file.las",
+        "/data/LiDAR/0001_Mission_Root/02_LAS_PCD/all_grouped_high_veg_10th_point.las",  # Path relative to mount point
         "--format=pcd-ascii"
     ]
     
