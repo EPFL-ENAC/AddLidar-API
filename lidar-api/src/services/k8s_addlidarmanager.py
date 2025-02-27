@@ -1,5 +1,4 @@
 from kubernetes import client, config, watch
-import time
 import os
 import uuid
 import logging
