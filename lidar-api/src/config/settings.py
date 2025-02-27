@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     IMAGE_NAME: str = "ghcr.io/epfl-enac/lidardatamanager"
     IMAGE_TAG: str = "latest"
     ROOT_VOLUME: str = ""  # Will be set based on PVC
-    NAMESPACE: str = "default"
+    NAMESPACE: str = "epfl-cryos-addlidar-potree-dev"
     MOUNT_PATH: str = "/data"
     PVC_NAME: str = "lidar-data-pvc"  # Default to our created PVC
     JOB_TIMEOUT: int = 300  # Timeout in seconds for job completion
