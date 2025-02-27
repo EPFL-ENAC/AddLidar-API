@@ -1,6 +1,7 @@
 """
 Celery worker for processing LiDAR point cloud data asynchronously
 """
+
 from celery import Celery
 import docker
 import os
@@ -65,8 +66,6 @@ def pull_image_with_retry(
                 logger.warning(
                     f"Authentication error while pulling image. Image may be private or registry settings incorrect: {e}"
                 )
-                # If this is a public image but we're having auth issues,
-                # let's check if the image already exists locally
                 try:
                     client.images.get(f"{image_name}:{image_tag}")
                     logger.info(
@@ -82,6 +81,66 @@ def pull_image_with_retry(
             logger.info(f"Retrying in {wait_time} seconds...")
             time.sleep(wait_time)
     return False
+
+
+def build_docker_command(
+    job_id: str,
+    input_file: str,
+    parameters: Optional[List[str]],
+    host_data_dir: str,
+    container_data_dir: str,
+) -> List[str]:
+    """
+    Build the Docker command to run in the container by processing input file and parameters.
+
+    Args:
+        job_id: Unique job identifier
+        input_file: Path to the input file
+        parameters: Additional CLI parameters
+        host_data_dir: Host directory for data volumes
+        container_data_dir: Container directory for data volumes
+
+    Returns:
+        List of command arguments
+    """
+    # Process parameters
+    if parameters is None:
+        parameters = []
+    processed_parameters: List[str] = []
+    for param in parameters:
+        if param.startswith("-i="):
+            input_path = param[3:]
+            if input_path.startswith("/data/"):
+                processed_parameters.append(param)
+            elif os.path.isabs(input_path) and input_path.startswith(host_data_dir):
+                rel_path = os.path.relpath(input_path, host_data_dir)
+                container_path = f"/data/{rel_path}"
+                processed_parameters.append(f"-i={container_path}")
+            else:
+                # Ensure no leading slash
+                container_path = f"/data/{input_path.lstrip('/')}"
+                processed_parameters.append(f"-i={container_path}")
+        else:
+            processed_parameters.append(param)
+
+    # Process input_file
+    if not os.path.isabs(input_file):
+        container_input_file = os.path.join(container_data_dir, input_file)
+    elif input_file.startswith(host_data_dir):
+        rel_path = os.path.relpath(input_file, host_data_dir)
+        container_input_file = os.path.join(container_data_dir, rel_path)
+    elif not input_file.startswith("/data/"):
+        container_input_file = f"/data/{os.path.basename(input_file)}"
+    else:
+        container_input_file = input_file
+
+    command = [container_input_file] + processed_parameters
+
+    if not any(param.startswith("-o=") for param in processed_parameters):
+        relative_output = os.path.join("output", f"output_{job_id}.las")
+        command.append(f"-o=/data/{relative_output}")
+
+    return command
 
 
 @celery_app.task(bind=True, name="process_lidar_data", max_retries=3)
@@ -120,66 +179,22 @@ def process_lidar_data(
             logger.error(error_msg)
             return {"status": "error", "job_id": job_id, "error": error_msg}
 
-        # Set up volume paths - use ROOT_VOLUME from env if available, otherwise use default
-        host_data_dir = os.environ.get("ROOT_VOLUME", os.environ.get("HOST_DATA_DIR", "/app/data"))
+        # Set up volume paths
+        host_data_dir = os.environ.get(
+            "ROOT_VOLUME", os.environ.get("HOST_DATA_DIR", "/app/data")
+        )
         container_data_dir = "/data"
-        
+
         logger.info(f"Using host data directory: {host_data_dir}")
-        
+
         # Ensure output directory exists
         output_dir = os.path.join(host_data_dir, "output")
         os.makedirs(output_dir, exist_ok=True)
 
-        # Default parameters if none provided
-        if parameters is None:
-            parameters = []
-
-        # Process all input paths to ensure they use the container path (/data)
-        processed_parameters = []
-        for param in parameters:
-            # Check if this is an input file argument (-i=something)
-            if param.startswith("-i="):
-                input_path = param[3:]  # Extract the path part
-                
-                # If the path already starts with /data, use it as is
-                if input_path.startswith("/data/"):
-                    processed_parameters.append(param)
-                # If it's an absolute path from the host data directory
-                elif os.path.isabs(input_path) and input_path.startswith(host_data_dir):
-                    # Convert to container path
-                    rel_path = os.path.relpath(input_path, host_data_dir)
-                    container_path = f"/data/{rel_path}"
-                    processed_parameters.append(f"-i={container_path}")
-                # Otherwise, assume it's already relative to container's /data
-                else:
-                    # If no /data prefix, add it
-                    if not input_path.startswith("/"):
-                        container_path = f"/data/{input_path}"
-                    else:
-                        container_path = input_path
-                    processed_parameters.append(f"-i={container_path}")
-            else:
-                processed_parameters.append(param)
-
-        # Process input_file
-        if not os.path.isabs(input_file):
-            input_file = os.path.join(container_data_dir, input_file)
-        elif input_file.startswith(host_data_dir):
-            # Convert host path to container path
-            rel_path = os.path.relpath(input_file, host_data_dir)
-            input_file = os.path.join(container_data_dir, rel_path)
-        elif not input_file.startswith("/data/"):
-            # Try to make it a valid container path
-            input_file = f"/data/{os.path.basename(input_file)}"
-
-        # Build command with parameters
-        command = [input_file]
-        command.extend(processed_parameters)
-
-        # Add output file parameter if not specified
-        if not any(param.startswith("-o=") for param in processed_parameters):
-            relative_output = os.path.join("output", f"output_{job_id}.las")
-            command.append(f"-o=/data/{relative_output}")
+        # Build Docker command using helper function
+        command = build_docker_command(
+            job_id, input_file, parameters, host_data_dir, container_data_dir
+        )
 
         logger.info(f"Running container with command: {command}")
 
@@ -206,7 +221,6 @@ def process_lidar_data(
                     "logs": logs,
                 },
             )
-            # Retry the task if appropriate
             if self.request.retries < self.max_retries:
                 logger.info(f"Retrying task, attempt {self.request.retries + 1}")
                 raise self.retry(countdown=60)
@@ -217,7 +231,6 @@ def process_lidar_data(
                 "logs": logs,
             }
 
-        # Return success result
         return {
             "status": "success",
             "job_id": job_id,
@@ -231,7 +244,6 @@ def process_lidar_data(
     except docker.errors.APIError as e:
         error_message = str(e)
         logger.error(f"Docker API error: {error_message}")
-        # Provide more helpful error messages for common issues
         if "denied: denied" in error_message:
             error_details = "Authentication error with Docker registry. For public images, no authentication should be needed."
         elif "connection refused" in error_message.lower():

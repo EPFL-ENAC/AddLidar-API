@@ -5,22 +5,23 @@ import os
 import uuid
 from typing import Tuple, Optional, List
 
+
 def process_point_cloud(cli_args: List[str]) -> Tuple[bytes, int, Optional[str]]:
     """
     Process point cloud data using a Docker container.
-    
+
     Args:
         cli_args: CLI arguments to pass to the Docker container
-        
+
     Returns:
         Tuple of (output data, exit code, output file path or None)
     """
     # Configure logging
     logger = logging.getLogger(__name__)
-    
+
     try:
         client = docker.from_env()
-        
+
         # No authentication needed for public images
         # Simply pull the image directly
         logger.info(f"Pulling image {settings.IMAGE_NAME}:{settings.IMAGE_TAG}")
@@ -39,7 +40,7 @@ def process_point_cloud(cli_args: List[str]) -> Tuple[bytes, int, Optional[str]]
 
         # Log the ROOT_VOLUME value being used
         logger.info(f"Using ROOT_VOLUME: {settings.ROOT_VOLUME}")
-        
+
         # Always mount to /data inside the container
         volumes = {
             f"{settings.ROOT_VOLUME}": {
@@ -55,7 +56,7 @@ def process_point_cloud(cli_args: List[str]) -> Tuple[bytes, int, Optional[str]]
         # Generate a unique filename
         unique_filename = f"output_{uuid.uuid4().hex}.bin"
         output_file_path = os.path.join("output", unique_filename)
-        
+
         # Always use /data path inside the container regardless of the host path
         container_output_path = f"/data/{output_file_path}"
 
@@ -65,12 +66,14 @@ def process_point_cloud(cli_args: List[str]) -> Tuple[bytes, int, Optional[str]]
             # Check if this is an input file argument (-i=something)
             if arg.startswith("-i="):
                 input_path = arg[3:]  # Extract the path part after "-i="
-                
+
                 # If the path already starts with /data, use it as is
                 if input_path.startswith("/data/"):
                     processed_cli_args.append(arg)
                 # If it's an absolute path from the host ROOT_VOLUME
-                elif os.path.isabs(input_path) and input_path.startswith(settings.ROOT_VOLUME):
+                elif os.path.isabs(input_path) and input_path.startswith(
+                    settings.ROOT_VOLUME
+                ):
                     # Convert to container path
                     rel_path = os.path.relpath(input_path, settings.ROOT_VOLUME)
                     container_path = f"/data/{rel_path}"
@@ -85,11 +88,11 @@ def process_point_cloud(cli_args: List[str]) -> Tuple[bytes, int, Optional[str]]
                     processed_cli_args.append(f"-i={container_path}")
             else:
                 processed_cli_args.append(arg)
-                
+
         # Add the output file argument to CLI args
         output_args = [f"-o={container_output_path}"]
         full_cli_args = processed_cli_args + output_args
-        
+
         logger.info(f"Running container with command: {full_cli_args}")
         logger.info(f"Running container with image: {settings.IMAGE_NAME}")
 

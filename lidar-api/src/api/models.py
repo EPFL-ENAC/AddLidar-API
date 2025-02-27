@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field, field_validator
 from pathlib import Path
 from ..config.settings import settings
 
+
 class PointCloudRequest(BaseModel):
     file_path: Path = Field(
         ..., description="Path to the input point cloud file (inside mounted volume)"
@@ -36,7 +37,7 @@ class PointCloudRequest(BaseModel):
     def validate_file_exists(cls, v: Path) -> Path:
         # Use ROOT_VOLUME from settings instead of hardcoded /data
         root_volume_path = Path(settings.ROOT_VOLUME)
-        
+
         # Convert to absolute path if relative
         if not v.is_absolute():
             # Prepend /data to absolute paths if not already starting with /data
@@ -52,14 +53,16 @@ class PointCloudRequest(BaseModel):
             except ValueError:
                 # If can't make relative to root, use as is
                 v = root_volume_path / v.name
-                
+
         # Ensure the path is within the ROOT_VOLUME directory for security
         try:
             if not str(v).startswith(str(root_volume_path)):
-                raise ValueError(f"File path must be within the mounted volume at {root_volume_path}")
+                raise ValueError(
+                    f"File path must be within the mounted volume at {root_volume_path}"
+                )
         except ValueError as e:
             raise ValueError(f"File path validation error: {str(e)}")
-            
+
         # We don't check if file exist, since it may not exist yet because of docker volumes
         return v
 

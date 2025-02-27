@@ -1,6 +1,7 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 import os
 
+
 class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     IMAGE_NAME: str = "lidardatamanager"
@@ -12,7 +13,7 @@ class Settings(BaseSettings):
     ROOT_VOLUME: str = "/data"
     API_PREFIX: str = "/api"
     PORT: int = 8000
-    
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         # If we're in local development and ROOT_VOLUME is still the default /data
@@ -21,7 +22,8 @@ class Settings(BaseSettings):
             local_path = "/Users/pierreguilbert/Works/git/github/EPFL-ENAC/AddLidar-API/lidar-api/data"
             if os.path.exists(local_path):
                 self.ROOT_VOLUME = local_path
-    
+
     model_config = SettingsConfigDict(env_file=".env")
+
 
 settings = Settings()
