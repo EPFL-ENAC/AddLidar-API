@@ -9,9 +9,9 @@ from fastapi.encoders import jsonable_encoder
 import time
 
 from src.api.models import PointCloudRequest, ProcessPointCloudResponse
-from src.services.docker_service import (
-    process_point_cloud as docker_process_point_cloud,
-)
+
+# Replace Docker service import with Kubernetes service
+from src.services.k8s_addlidarmanager import process_point_cloud
 from src.config.settings import settings
 from celery.result import AsyncResult
 from celery import Celery
@@ -29,7 +29,7 @@ celery_app = Celery(
 
 
 @router.get("/process-point-cloud")
-async def process_point_cloud(
+async def process_point_cloud_endpoint(
     background_tasks: BackgroundTasks,
     file_path: str,
     remove_attribute: list[str] | None = None,
@@ -64,11 +64,9 @@ async def process_point_cloud(
         cli_args = request.to_cli_arguments()
         logger.debug(f"CLI arguments: {cli_args}")
 
-        # Process point cloud using docker service
-        # The docker service now automatically adds the -o parameter
-        output, exit_code, output_file_path = docker_process_point_cloud(
-            cli_args=cli_args
-        )
+        # Process point cloud using Kubernetes service instead of Docker
+        # The Kubernetes service automatically adds the -o parameter
+        output, exit_code, output_file_path = process_point_cloud(cli_args=cli_args)
 
         # If exit code is 0, return the file data
         if exit_code == 0 and output_file_path:
