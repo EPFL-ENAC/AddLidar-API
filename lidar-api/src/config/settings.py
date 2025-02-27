@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-import os
+
 
 class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
@@ -12,5 +12,6 @@ class Settings(BaseSettings):
     JOB_TIMEOUT: int = 300  # Timeout in seconds for job completion
 
     model_config = SettingsConfigDict(env_file=".env")
+
 
 settings = Settings()
