@@ -1,39 +1,54 @@
 from kubernetes import client, config, watch
 import time
-import base64
 import os
 import uuid
 import logging
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, Dict, Any
 
 logger = logging.getLogger(__name__)
 
-# ROOT_VOLUME=
-
 # Default settings - would typically be loaded from environment variables or config files
-DEFAULT_SETTINGS = {
+DEFAULT_SETTINGS: Dict[str, Any] = {
     "IMAGE_NAME": "ghcr.io/epfl-enac/lidardatamanager",
     "IMAGE_TAG": "latest",
-    "ROOT_VOLUME": "/Users/pierreguilbert/Works/git/github/EPFL-ENAC/AddLidar-API/lidar-api/data",
+    "ROOT_VOLUME": "",  # No default, will be set based on STORAGE_TYPE
     "NAMESPACE": "default",
-    "PVC_NAME": "lidar-data-pvc",  # Persistent Volume Claim for data storage
-    "MOUNT_PATH": "/data"
+    "MOUNT_PATH": "/data",
+    "STORAGE_TYPE": "emptyDir",  # Options: "pvc", "emptyDir", "hostPath", "none"
+    "PVC_NAME": "",              # Only used if STORAGE_TYPE is "pvc"
+    "HOST_PATH": "",             # Only used if STORAGE_TYPE is "hostPath"
+    "JOB_TIMEOUT": 300           # Timeout in seconds for job completion
 }
 
-def get_settings():
-    """Get settings from environment variables or use defaults"""
+
+def get_settings() -> Dict[str, Any]:
+    """
+    Get settings from environment variables or use defaults.
+    
+    Returns:
+        Dict[str, Any]: Dictionary of configuration settings
+    """
     settings = DEFAULT_SETTINGS.copy()
     
     # Override with environment variables if available
     for key in settings:
         env_val = os.environ.get(key)
         if env_val:
-            if key == "PORT":
+            if key in ["JOB_TIMEOUT", "PORT"]:
                 settings[key] = int(env_val)
             else:
                 settings[key] = env_val
+
+    # Set ROOT_VOLUME based on storage type if not explicitly provided
+    if not settings["ROOT_VOLUME"]:
+        if settings["STORAGE_TYPE"] == "hostPath" and settings["HOST_PATH"]:
+            settings["ROOT_VOLUME"] = settings["HOST_PATH"]
+        else:
+            # Default for local development
+            settings["ROOT_VOLUME"] = "/Users/pierreguilbert/Works/git/github/EPFL-ENAC/AddLidar-API/lidar-api/data"
                 
     return settings
+
 
 def process_point_cloud(cli_args: List[str]) -> Tuple[bytes, int, Optional[str]]:
     """
@@ -51,8 +66,11 @@ def process_point_cloud(cli_args: List[str]) -> Tuple[bytes, int, Optional[str]]
         # Load Kubernetes config
         try:
             config.load_kube_config()
-        except:
+            logger.info("Using kubeconfig for authentication")
+        except Exception as e:
+            logger.info(f"Could not load kubeconfig: {str(e)}")
             config.load_incluster_config()
+            logger.info("Using in-cluster configuration")
             
         # Generate a unique job name
         job_name = f"lidar-job-{uuid.uuid4().hex[:10]}"
@@ -76,23 +94,78 @@ def process_point_cloud(cli_args: List[str]) -> Tuple[bytes, int, Optional[str]]
         batch_v1 = client.BatchV1Api()
         core_v1 = client.CoreV1Api()
         
-        # Define volume mounts for the container
-        volume_mounts = [
-            client.V1VolumeMount(
-                name="lidar-data-volume",
-                mount_path=settings["MOUNT_PATH"]
-            )
-        ]
+        # Define volume and volume mounts based on storage type
+        volumes = []
+        volume_mounts = []
         
-        # Define volumes
-        volumes = [
-            client.V1Volume(
-                name="lidar-data-volume",
-                persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(
-                    claim_name=settings["PVC_NAME"]
+        if settings["STORAGE_TYPE"] == "pvc":
+            if not settings["PVC_NAME"]:
+                logger.warning("PVC storage type selected but PVC_NAME is empty, falling back to emptyDir")
+                settings["STORAGE_TYPE"] = "emptyDir"
+            else:
+                volumes.append(
+                    client.V1Volume(
+                        name="lidar-data-volume",
+                        persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(
+                            claim_name=settings["PVC_NAME"]
+                        )
+                    )
+                )
+                volume_mounts.append(
+                    client.V1VolumeMount(
+                        name="lidar-data-volume",
+                        mount_path=settings["MOUNT_PATH"]
+                    )
+                )
+                logger.info(f"Using PVC: {settings['PVC_NAME']}")
+                
+        if settings["STORAGE_TYPE"] == "hostPath":
+            if not settings["HOST_PATH"]:
+                logger.warning("hostPath storage type selected but HOST_PATH is empty, falling back to emptyDir")
+                settings["STORAGE_TYPE"] = "emptyDir"
+            else:
+                volumes.append(
+                    client.V1Volume(
+                        name="lidar-data-volume",
+                        host_path=client.V1HostPathVolumeSource(
+                            path=settings["HOST_PATH"]
+                        )
+                    )
+                )
+                volume_mounts.append(
+                    client.V1VolumeMount(
+                        name="lidar-data-volume",
+                        mount_path=settings["MOUNT_PATH"]
+                    )
+                )
+                logger.info(f"Using hostPath: {settings['HOST_PATH']}")
+                
+        if settings["STORAGE_TYPE"] == "emptyDir":
+            volumes.append(
+                client.V1Volume(
+                    name="lidar-data-volume",
+                    empty_dir=client.V1EmptyDirVolumeSource()
                 )
             )
-        ]
+            volume_mounts.append(
+                client.V1VolumeMount(
+                    name="lidar-data-volume",
+                    mount_path=settings["MOUNT_PATH"]
+                )
+            )
+            logger.info("Using emptyDir for temporary storage")
+        
+        # If storage type is "none", no volumes will be added
+        if settings["STORAGE_TYPE"] == "none":
+            logger.info("Running without volumes")
+            
+        # Define job container
+        container = client.V1Container(
+            name="lidar-container",
+            image=container_image,
+            args=full_cli_args,
+            volume_mounts=volume_mounts
+        )
         
         # Define job
         job = client.V1Job(
@@ -105,20 +178,13 @@ def process_point_cloud(cli_args: List[str]) -> Tuple[bytes, int, Optional[str]]
             spec=client.V1JobSpec(
                 template=client.V1PodTemplateSpec(
                     spec=client.V1PodSpec(
-                        containers=[
-                            client.V1Container(
-                                name="lidar-container",
-                                image=container_image,
-                                args=full_cli_args,
-                                volume_mounts=volume_mounts
-                            )
-                        ],
+                        containers=[container],
                         volumes=volumes,
                         restart_policy="Never"
                     )
                 ),
                 backoff_limit=0,  # No retries
-                ttl_seconds_after_finished=86400  # Auto-delete job after 1 day
+                ttl_seconds_after_finished=3600  # Auto-delete job after 1 hour
             )
         )
         
@@ -129,11 +195,11 @@ def process_point_cloud(cli_args: List[str]) -> Tuple[bytes, int, Optional[str]]
         job_status = {"succeeded": False, "failed": False}
         w = watch.Watch()
         
-        logger.info(f"Waiting for job {job_name} to complete...")
+        logger.info(f"Waiting for job {job_name} to complete (timeout: {settings['JOB_TIMEOUT']}s)...")
         for event in w.stream(
             batch_v1.list_namespaced_job, 
             namespace=settings["NAMESPACE"], 
-            timeout_seconds=300  # 5 minutes timeout
+            timeout_seconds=settings["JOB_TIMEOUT"]
         ):
             if event["object"].metadata.name == job_name:
                 job_obj = event["object"]
@@ -197,10 +263,13 @@ def process_point_cloud(cli_args: List[str]) -> Tuple[bytes, int, Optional[str]]
 
 
 # Example usage to demonstrate the functionality
-def example_usage():
+def example_usage() -> None:
+    """
+    Example function showing how to use the process_point_cloud function.
+    """
     # Example CLI arguments for LidarDataManager
     cli_args = [
-        "-i=/data/LiDAR/0001_Mission_Root/02_LAS_PCD/small_test_file.las",
+        "/data/LiDAR/0001_Mission_Root/02_LAS_PCD/small_test_file.las",
         "--format=pcd-ascii"
     ]
     

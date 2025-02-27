@@ -6,7 +6,7 @@ This module provides a Kubernetes-based implementation for processing LiDAR poin
 
 The wrapper creates Kubernetes jobs to run the LidarDataManager container for point cloud processing tasks. It handles:
 
-- Creating Kubernetes jobs with proper volume mounts
+- Creating Kubernetes jobs with flexible storage options
 - Passing command line arguments to the container
 - Managing output files
 - Collecting logs and results
@@ -14,19 +14,30 @@ The wrapper creates Kubernetes jobs to run the LidarDataManager container for po
 
 ## Requirements
 
-- Kubernetes cluster access (configured via kubeconfig)
-- Persistent Volume Claim (PVC) for data storage
+- Kubernetes cluster access (configured via kubeconfig or in-cluster config)
 - The LidarDataManager image available in the specified container registry
 
 ## Configuration
 
 The module uses the following environment variables (with defaults):
 
-- `IMAGE_NAME`: Container image name (default: "ghcr.io/epfl-enac/lidardatamanager")
-- `IMAGE_TAG`: Container image tag (default: "latest")
-- `NAMESPACE`: Kubernetes namespace (default: "default")
-- `PVC_NAME`: Name of PVC for data storage (default: "lidar-data-pvc")
-- `MOUNT_PATH`: Path to mount the data volume (default: "/data")
+| Environment Variable | Default | Description |
+|---------------------|---------|-------------|
+| `IMAGE_NAME` | `ghcr.io/epfl-enac/lidardatamanager` | Container image name |
+| `IMAGE_TAG` | `latest` | Container image tag |
+| `NAMESPACE` | `default` | Kubernetes namespace |
+| `MOUNT_PATH` | `/data` | Path to mount the data volume in container |
+| `STORAGE_TYPE` | `emptyDir` | Storage type: `pvc`, `emptyDir`, `hostPath`, or `none` |
+| `PVC_NAME` | `""` | Name of PVC (only used if `STORAGE_TYPE` is `pvc`) |
+| `HOST_PATH` | `""` | Host path (only used if `STORAGE_TYPE` is `hostPath`) |
+| `JOB_TIMEOUT` | `300` | Timeout in seconds for job completion |
+
+### Storage Types
+
+1. **emptyDir** (default): Uses Kubernetes ephemeral storage. Data is lost when the pod terminates.
+2. **pvc**: Uses a Persistent Volume Claim (requires `PVC_NAME` to be set).
+3. **hostPath**: Mounts a directory from the host node (requires `HOST_PATH` to be set).
+4. **none**: No storage volumes mounted.
 
 ## Usage
 
@@ -49,28 +60,30 @@ else:
     print(f"Processing failed with error: {output.decode('utf-8')}")
 ```
 
-## Kubernetes Setup
+## Examples
 
-Before using this wrapper, ensure you have:
+### Using emptyDir (Default)
 
-1. A Kubernetes cluster with appropriate access
-2. A Persistent Volume and Persistent Volume Claim for data storage:
-
-```yaml
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: lidar-data-pvc
-  namespace: default
-spec:
-  accessModes:
-    - ReadWriteMany
-  resources:
-    requests:
-      storage: 10Gi
+```bash
+# No specific environment variables needed
+python main_addlidarmanager.py
 ```
 
-3. The LidarDataManager image available in your container registry
+### Using Persistent Volume Claim
+
+```bash
+export STORAGE_TYPE="pvc"
+export PVC_NAME="my-lidar-data-pvc"
+python main_addlidarmanager.py
+```
+
+### Using Host Path
+
+```bash
+export STORAGE_TYPE="hostPath"
+export HOST_PATH="/mnt/lidar-data"
+python main_addlidarmanager.py
+```
 
 ## Testing
 
@@ -78,4 +91,3 @@ Run the example in the main script to test functionality:
 
 ```bash
 python main_addlidarmanager.py
-```

@@ -1,7 +1,7 @@
 from typing import Optional, List, Tuple
 from pydantic import BaseModel, Field, field_validator
 from pathlib import Path
-
+from ..config.settings import settings
 
 class PointCloudRequest(BaseModel):
     file_path: Path = Field(
@@ -34,19 +34,32 @@ class PointCloudRequest(BaseModel):
     @field_validator("file_path")
     @classmethod
     def validate_file_exists(cls, v: Path) -> Path:
+        # Use ROOT_VOLUME from settings instead of hardcoded /data
+        root_volume_path = Path(settings.ROOT_VOLUME)
+        
         # Convert to absolute path if relative
         if not v.is_absolute():
-            v = Path("/data") / v
-        else:
-            # Prepend ./data to absolute paths
-            v = Path("/data") / v.relative_to("/")
-
-        # # Ensure the path is within the /data directory for security
+            # Prepend /data to absolute paths if not already starting with /data
+            if not str(v).startswith("/data"):
+                v = Path("/data") / v.relative_to("/")
+            else:
+                v = v
+            try:
+                # Try to make relative to root, for Kubernetes case
+                if v.is_relative_to("/"):
+                    relative_path = v.relative_to("/")
+                    v = root_volume_path / relative_path
+            except ValueError:
+                # If can't make relative to root, use as is
+                v = root_volume_path / v.name
+                
+        # Ensure the path is within the ROOT_VOLUME directory for security
         try:
-            v.relative_to("/data")
-        except ValueError:
-            raise ValueError("File path must be within the mounted /data volume")
-
+            if not str(v).startswith(str(root_volume_path)):
+                raise ValueError(f"File path must be within the mounted volume at {root_volume_path}")
+        except ValueError as e:
+            raise ValueError(f"File path validation error: {str(e)}")
+            
         # We don't check if file exist, since it may not exist yet because of docker volumes
         return v
 
