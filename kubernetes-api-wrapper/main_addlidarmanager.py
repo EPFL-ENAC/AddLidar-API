@@ -8,11 +8,13 @@ from typing import Tuple, Optional, List
 
 logger = logging.getLogger(__name__)
 
+# ROOT_VOLUME=
+
 # Default settings - would typically be loaded from environment variables or config files
 DEFAULT_SETTINGS = {
     "IMAGE_NAME": "ghcr.io/epfl-enac/lidardatamanager",
     "IMAGE_TAG": "latest",
-    "ROOT_VOLUME": "/data",
+    "ROOT_VOLUME": "/Users/pierreguilbert/Works/git/github/EPFL-ENAC/AddLidar-API/lidar-api/data",
     "NAMESPACE": "default",
     "PVC_NAME": "lidar-data-pvc",  # Persistent Volume Claim for data storage
     "MOUNT_PATH": "/data"
