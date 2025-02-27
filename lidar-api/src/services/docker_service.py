@@ -47,10 +47,8 @@ def process_point_cloud(cli_args: list[str]) -> tuple[bytes, int]:
         returncode = result["StatusCode"]
         if returncode == 0:
             return output, 0
-        # TODO: remove when addlidarmanager is fixed
-        if returncode == 1:
-            return output, 0
-        return stderr, returncode
+        else:
+            return stderr, returncode
     except Exception as e:
         return str(e).encode("utf-8"), 1
     except docker.errors.APIError as e:

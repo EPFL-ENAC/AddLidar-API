@@ -218,8 +218,8 @@ async def create_processing_job(
     # Submit the job to Celery
     task = celery_app.send_task(
         "process_lidar_data",
-        args=[job_id, request.input_file],
-        kwargs={"parameters": request.parameters},
+        args=[job_id, request.file_path],
+        kwargs={"parameters": request.to_cli_arguments()},
     )
 
     # Store job metadata
