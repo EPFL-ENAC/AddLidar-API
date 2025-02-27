@@ -2,7 +2,6 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse, Response, FileResponse
 from pydantic import ValidationError, BaseModel
 import logging
-import tempfile
 import os
 import uuid
 from typing import Dict, Optional, Any
@@ -66,45 +65,40 @@ async def process_point_cloud(
         logger.debug(f"CLI arguments: {cli_args}")
 
         # Process point cloud using docker service
-        output, exit_code = docker_process_point_cloud(cli_args=cli_args)
+        # The docker service now automatically adds the -o parameter
+        output, exit_code, output_file_path = docker_process_point_cloud(
+            cli_args=cli_args
+        )
 
-        # If exit code is 0, return the binary data
-        if exit_code == 0:
+        # If exit code is 0, return the file data
+        if exit_code == 0 and output_file_path:
             # Try to determine content type based on format
-            file_extension = ".bin"
             content_type = "application/octet-stream"
             if format:
-                if format.lower() in ["pcd-ascii", "pcd-binary"]:
-                    content_type = (
-                        "text/plain"
-                        if format == "pcd-ascii"
-                        else "application/octet-stream"
-                    )
-                    file_extension = ".pcd"
-                elif format.lower() in ["lasv14", "las"]:
+                if format.lower() == "pcd-ascii":
+                    content_type = "text/plain"
+                elif format.lower() in ["pcd-binary", "lasv14", "las"]:
                     content_type = "application/octet-stream"
-                    file_extension = ".las"
 
-            # Create a temporary file to store the output
-            temp_dir = tempfile.gettempdir()
-            file_name = f"processed_pointcloud_{uuid.uuid4()}{file_extension}"
-            temp_file_path = os.path.join(temp_dir, file_name)
+            # Get the full path to the output file
+            full_output_path = os.path.join(settings.ROOT_VOLUME, output_file_path)
 
-            # Write the binary data to the temporary file
-            with open(temp_file_path, "wb") as f:
-                f.write(output)
+            # Use the filename from the output path
+            file_name = os.path.basename(output_file_path)
 
-            # Add cleanup task to delete the temporary file after response is sent
-            def remove_temp_file(file_path: str) -> None:
+            # Add cleanup task to delete the output file after response is sent
+            def remove_output_file(file_path: str) -> None:
                 try:
-                    os.unlink(file_path)
+                    if os.path.exists(file_path):
+                        os.unlink(file_path)
+                        logger.info(f"Deleted temporary output file: {file_path}")
                 except Exception as e:
-                    logger.error(f"Error deleting temporary file {file_path}: {str(e)}")
+                    logger.error(f"Error deleting output file {file_path}: {str(e)}")
 
-            background_tasks.add_task(remove_temp_file, temp_file_path)
+            background_tasks.add_task(remove_output_file, full_output_path)
 
             return FileResponse(
-                path=temp_file_path, media_type=content_type, filename=file_name
+                path=full_output_path, media_type=content_type, filename=file_name
             )
 
         # If there was an error, return JSON response
