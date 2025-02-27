@@ -25,8 +25,9 @@ This API provides a RESTful interface for processing LiDAR point cloud data. Bui
 Create a `.env` file in the root directory with the following variables:
 ```bash
 ENVIRONMENT=development
-DOCKER_IMAGE=ghcr.io/epfl-enac/lidardatamanager:latest
-DOCKER_VOLUME=/path/to/your/data/folder
+IMAGE_NAME=ghcr.io/epfl-enac/lidardatamanager
+IMAGE_TAG=latest
+ROOT_VOLUME=/path/to/your/data/folder
 API_PREFIX=/api
 PORT=8000
 ```
@@ -58,4 +59,8 @@ Run tests with: `make test` or `pytest`
 - [ ] Create your first milestone: https://github.com/EPFL-ENAC/AddLidar-API/milestones
 - [ ] Protect your branch if you're a pro user: https://github.com/EPFL-ENAC/AddLidar-API/settings/branches
 
+
+
+
+http://0.0.0.0:8000/process-point-cloud?file_path=%2FLiDAR%2F0001_Mission_Root%2F02_LAS_PCD%2Fall_grouped_high_veg_10th_point.las&outcrs=EPSG%3A4326&returns=10&format=lasv14
 

@@ -1,13 +1,18 @@
-import os
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class Settings:
-    def __init__(self):
-        self.environment = os.getenv("ENVIRONMENT", "development")
-        self.docker_image = os.getenv("DOCKER_IMAGE", "lidardatamanager:latest")
-        self.docker_volume = os.getenv("DOCKER_VOLUME", "/path/to/dummy/folder")
-        self.api_prefix = os.getenv("API_PREFIX", "/api")
-        self.port = int(os.getenv("PORT", 8000))
+class Settings(BaseSettings):
+    ENVIRONMENT: str = "development"
+    IMAGE_NAME: str = "ghcr.io/epfl-enac/lidardatamanager"
+    IMAGE_TAG: str = "latest"
+    ROOT_VOLUME: str = ""  # Will be set based on PVC
+    NAMESPACE: str = "epfl-cryos-addlidar-potree-dev"
+    MOUNT_PATH: str = "/data"
+    PVC_NAME: str = "lidar-data-pvc"  # Default to our created PVC
+    JOB_TIMEOUT: int = 300  # Timeout in seconds for job completion
+    DEFAULT_ROOT: str = "/data"  # Default root path based on environment
+
+    model_config = SettingsConfigDict(env_file=".env")
 
 
 settings = Settings()

@@ -1,3 +1,35 @@
 node_modules
 addlidar-api_old
 data/*
+
+node_modules
+data/*
+data/
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+.Python
+env/
+venv/
+ENV/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+#  Usually these files are written into a dist/ subdirectory,
+#  but make sure to ignore them if they're lying around.
+build/
+dist/
+*.manifest
+*.spec
+
+# macOS
+*.DS_Store
+
+# Environments
+.env

@@ -1,5 +1,7 @@
 Python 3 and FastAPI Guidelines:
 
+- use uv run pytest instead of  python -m pytest
+
 - Follow PEP 8 style guidelines for Python code.
 - Use type hints extensively for better code clarity and maintainability.
 - Structure FastAPI applications using modular design (routers, services, models).
@@ -10,3 +12,4 @@ Python 3 and FastAPI Guidelines:
 - Implement logging for debugging and monitoring.
 - Use Docker and Docker Compose for containerization and deployment.
 - Follow RESTful API design principles.
+
