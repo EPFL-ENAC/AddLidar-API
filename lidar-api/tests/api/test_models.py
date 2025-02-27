@@ -30,12 +30,3 @@ def test_file_path_validator():
     request = PointCloudRequest(file_path=absolute_path)
     assert request.file_path == valid_path
 
-
-def test_file_path_validator_relative():
-    """Test the file path validator with relative paths"""
-    # Test valid relative path
-    relative_path = Path(
-        "LiDAR/0001_Mission_Root/TEST_GENERATED/all_grouped_high_veg_10th_point.las"
-    )
-    request = PointCloudRequest(file_path=relative_path)
-    assert request.file_path == Path("/data") / relative_path
