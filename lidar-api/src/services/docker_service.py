@@ -55,7 +55,7 @@ def process_point_cloud(cli_args: List[str]) -> Tuple[bytes, int, Optional[str]]
         container_output_path = f"/data/{output_file_path}"
 
         # Add the output file argument to CLI args
-        output_args = ["-o", container_output_path]
+        output_args = [f"-o={container_output_path}"]
         full_cli_args = cli_args + output_args
 
         logger.info(f"Running container with command: {full_cli_args}")

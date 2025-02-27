@@ -74,17 +74,40 @@ async def process_point_cloud(
         if exit_code == 0 and output_file_path:
             # Try to determine content type based on format
             content_type = "application/octet-stream"
-            if format:
-                if format.lower() == "pcd-ascii":
-                    content_type = "text/plain"
-                elif format.lower() in ["pcd-binary", "lasv14", "las"]:
-                    content_type = "application/octet-stream"
+
+            # Map format to appropriate file extension and content type
+            format_to_extension = {
+                "pcd-ascii": (".pcd", "text/plain"),
+                "pcd-binary": (".pcd", "application/octet-stream"),
+                "lasv14": (".las", "application/octet-stream"),
+                "las": (".las", "application/octet-stream"),
+                "laz": (".laz", "application/octet-stream"),
+                "ply": (".ply", "application/octet-stream"),
+                "ply-ascii": (".ply", "text/plain"),
+                "ply-binary": (".ply", "application/octet-stream"),
+                "xyz": (".xyz", "text/plain"),
+                "txt": (".txt", "text/plain"),
+                "csv": (".csv", "text/csv"),
+            }
+
+            # Default extension and content type
+            extension = ".bin"
+            content_type = "application/octet-stream"
+
+            # If format is specified, get the appropriate extension and content type
+            if format and format.lower() in format_to_extension:
+                extension, content_type = format_to_extension[format.lower()]
 
             # Get the full path to the output file
             full_output_path = os.path.join(settings.ROOT_VOLUME, output_file_path)
 
-            # Use the filename from the output path
-            file_name = os.path.basename(output_file_path)
+            # Create a filename with the appropriate extension
+            original_filename = os.path.basename(output_file_path)
+            base_filename = os.path.splitext(original_filename)[0]
+            file_name = f"{base_filename}{extension}"
+
+            # Log the file name we're serving
+            logger.debug(f"Serving file {file_name} with content type {content_type}")
 
             # Add cleanup task to delete the output file after response is sent
             def remove_output_file(file_path: str) -> None:
