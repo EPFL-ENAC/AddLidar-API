@@ -3,19 +3,9 @@ import os
 import uuid
 import logging
 from typing import Tuple, Optional, List, Dict, Any
+from src.config.settings import settings
 
 logger = logging.getLogger(__name__)
-
-# Default settings - would typically be loaded from environment variables or config files
-DEFAULT_SETTINGS: Dict[str, Any] = {
-    "IMAGE_NAME": "ghcr.io/epfl-enac/lidardatamanager",
-    "IMAGE_TAG": "latest",
-    "ROOT_VOLUME": "",  # Will be set based on PVC
-    "NAMESPACE": "default",
-    "MOUNT_PATH": "/data",
-    "PVC_NAME": "lidar-data-pvc",  # Default to our created PVC
-    "JOB_TIMEOUT": 300,  # Timeout in seconds for job completion
-}
 
 
 def get_settings() -> Dict[str, Any]:
@@ -25,22 +15,7 @@ def get_settings() -> Dict[str, Any]:
     Returns:
         Dict[str, Any]: Dictionary of configuration settings
     """
-    settings = DEFAULT_SETTINGS.copy()
-
-    # Override with environment variables if available
-    for key in settings:
-        env_val = os.environ.get(key)
-        if env_val:
-            if key in ["JOB_TIMEOUT", "PORT"]:
-                settings[key] = int(env_val)
-            else:
-                settings[key] = env_val
-
-    # Set ROOT_VOLUME based on PVC
-    if not settings["ROOT_VOLUME"]:
-        settings["ROOT_VOLUME"] = f"pvc:{settings['PVC_NAME']}"
-
-    return settings
+    return settings.dict()
 
 
 def process_point_cloud(cli_args: List[str]) -> Tuple[bytes, int, Optional[str]]:
