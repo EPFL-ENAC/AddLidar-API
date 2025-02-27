@@ -1,114 +1,220 @@
 from kubernetes import client, config, watch
 import time
 import base64
+import os
+import uuid
+import logging
+from typing import Tuple, Optional, List
 
-def create_and_monitor_job(job_name, namespace, container_image, command):
-    """
-    Create a Kubernetes job, monitor its status, and retrieve its logs.
+logger = logging.getLogger(__name__)
+
+# Default settings - would typically be loaded from environment variables or config files
+DEFAULT_SETTINGS = {
+    "IMAGE_NAME": "ghcr.io/epfl-enac/lidardatamanager",
+    "IMAGE_TAG": "latest",
+    "ROOT_VOLUME": "/data",
+    "NAMESPACE": "default",
+    "PVC_NAME": "lidar-data-pvc",  # Persistent Volume Claim for data storage
+    "MOUNT_PATH": "/data"
+}
+
+def get_settings():
+    """Get settings from environment variables or use defaults"""
+    settings = DEFAULT_SETTINGS.copy()
     
+    # Override with environment variables if available
+    for key in settings:
+        env_val = os.environ.get(key)
+        if env_val:
+            if key == "PORT":
+                settings[key] = int(env_val)
+            else:
+                settings[key] = env_val
+                
+    return settings
+
+def process_point_cloud(cli_args: List[str]) -> Tuple[bytes, int, Optional[str]]:
+    """
+    Process point cloud data using a Kubernetes job.
+
     Args:
-        job_name (str): Name of the job
-        namespace (str): Kubernetes namespace
-        container_image (str): Docker image to use
-        command (list): Command to run in the container
-    
+        cli_args: CLI arguments to pass to the container
+
     Returns:
-        tuple: (job_success, logs)
+        Tuple of (output data, exit code, output file path or None)
     """
-    # Load Kubernetes config
-    # Instead of trying incluster first
+    settings = get_settings()
+    
     try:
-        # Try kubeconfig first (for Docker Desktop)
-        config.load_kube_config()
-    except:
-        # Fall back to in-cluster config
-        config.load_incluster_config()
-    
-    # Create API clients
-    batch_v1 = client.BatchV1Api()
-    core_v1 = client.CoreV1Api()
-    
-    # Define job spec
-    job = client.V1Job(
-        api_version="batch/v1",
-        kind="Job",
-        metadata=client.V1ObjectMeta(
-            name=job_name,
-            namespace=namespace
-        ),
-        spec=client.V1JobSpec(
-            template=client.V1PodTemplateSpec(
-                spec=client.V1PodSpec(
-                    containers=[
-                        client.V1Container(
-                            name="job-container",
-                            image=container_image,
-                            command=command
-                        )
-                    ],
-                    restart_policy="Never"
-                )
-            ),
-            backoff_limit=0  # No retries
-        )
-    )
-    
-    # Create the job
-    print(f"Creating job {job_name} in namespace {namespace}")
-    batch_v1.create_namespaced_job(namespace=namespace, body=job)
-    
-    # Wait for job completion
-    job_status = {"succeeded": False, "failed": False}
-    w = watch.Watch()
-    
-    print("Waiting for job to complete...")
-    for event in w.stream(batch_v1.list_namespaced_job, namespace=namespace, timeout_seconds=60):
-        if event["object"].metadata.name == job_name:
-            job_obj = event["object"]
+        # Load Kubernetes config
+        try:
+            config.load_kube_config()
+        except:
+            config.load_incluster_config()
             
-            # Check if job has completed
-            if job_obj.status.succeeded:
-                job_status["succeeded"] = True
-                w.stop()
-                break
-            elif job_obj.status.failed:
-                job_status["failed"] = True
-                w.stop()
-                break
-    
-    # Get the pod associated with the job
-    label_selector = f"job-name={job_name}"
-    pods = core_v1.list_namespaced_pod(namespace=namespace, label_selector=label_selector)
-    
-    if not pods.items:
-        return job_status["succeeded"], "No pods found for this job"
-    
-    pod_name = pods.items[0].metadata.name
-    
-    # Get the logs
-    logs = core_v1.read_namespaced_pod_log(name=pod_name, namespace=namespace)
-    
-    # Clean up (optional)
-    # batch_v1.delete_namespaced_job(name=job_name, namespace=namespace, body=client.V1DeleteOptions())
-    
-    return job_status["succeeded"], logs
+        # Generate a unique job name
+        job_name = f"lidar-job-{uuid.uuid4().hex[:10]}"
+        
+        # Generate a unique filename for output
+        unique_filename = f"output_{uuid.uuid4().hex}.bin"
+        output_file_path = os.path.join("output", unique_filename)
+        container_output_path = f"{settings['MOUNT_PATH']}/{output_file_path}"
+        
+        # Add the output file argument to CLI args
+        output_args = [f"-o={container_output_path}"]
+        full_cli_args = cli_args + output_args
+        
+        # The container image to use
+        container_image = f"{settings['IMAGE_NAME']}:{settings['IMAGE_TAG']}"
+        
+        logger.info(f"Creating job {job_name} with command: {full_cli_args}")
+        logger.info(f"Using container image: {container_image}")
+        
+        # Create API clients
+        batch_v1 = client.BatchV1Api()
+        core_v1 = client.CoreV1Api()
+        
+        # Define volume mounts for the container
+        volume_mounts = [
+            client.V1VolumeMount(
+                name="lidar-data-volume",
+                mount_path=settings["MOUNT_PATH"]
+            )
+        ]
+        
+        # Define volumes
+        volumes = [
+            client.V1Volume(
+                name="lidar-data-volume",
+                persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(
+                    claim_name=settings["PVC_NAME"]
+                )
+            )
+        ]
+        
+        # Define job
+        job = client.V1Job(
+            api_version="batch/v1",
+            kind="Job",
+            metadata=client.V1ObjectMeta(
+                name=job_name,
+                namespace=settings["NAMESPACE"]
+            ),
+            spec=client.V1JobSpec(
+                template=client.V1PodTemplateSpec(
+                    spec=client.V1PodSpec(
+                        containers=[
+                            client.V1Container(
+                                name="lidar-container",
+                                image=container_image,
+                                args=full_cli_args,
+                                volume_mounts=volume_mounts
+                            )
+                        ],
+                        volumes=volumes,
+                        restart_policy="Never"
+                    )
+                ),
+                backoff_limit=0,  # No retries
+                ttl_seconds_after_finished=86400  # Auto-delete job after 1 day
+            )
+        )
+        
+        # Create the job
+        batch_v1.create_namespaced_job(namespace=settings["NAMESPACE"], body=job)
+        
+        # Wait for job completion
+        job_status = {"succeeded": False, "failed": False}
+        w = watch.Watch()
+        
+        logger.info(f"Waiting for job {job_name} to complete...")
+        for event in w.stream(
+            batch_v1.list_namespaced_job, 
+            namespace=settings["NAMESPACE"], 
+            timeout_seconds=300  # 5 minutes timeout
+        ):
+            if event["object"].metadata.name == job_name:
+                job_obj = event["object"]
+                
+                # Check if job has completed
+                if job_obj.status.succeeded:
+                    job_status["succeeded"] = True
+                    logger.info(f"Job {job_name} succeeded")
+                    w.stop()
+                    break
+                elif job_obj.status.failed:
+                    job_status["failed"] = True
+                    logger.error(f"Job {job_name} failed")
+                    w.stop()
+                    break
+        
+        # Get the pod associated with the job
+        label_selector = f"job-name={job_name}"
+        pods = core_v1.list_namespaced_pod(
+            namespace=settings["NAMESPACE"], 
+            label_selector=label_selector
+        )
+        
+        if not pods.items:
+            logger.error(f"No pods found for job {job_name}")
+            return b"No pods found for this job", 1, None
+        
+        pod_name = pods.items[0].metadata.name
+        
+        # Get the logs
+        logs = core_v1.read_namespaced_pod_log(
+            name=pod_name, 
+            namespace=settings["NAMESPACE"]
+        )
+        
+        # Convert logs to bytes
+        logs_bytes = logs.encode('utf-8')
+        
+        # Clean up job
+        try:
+            delete_options = client.V1DeleteOptions(propagation_policy='Background')
+            batch_v1.delete_namespaced_job(
+                name=job_name,
+                namespace=settings["NAMESPACE"],
+                body=delete_options
+            )
+            logger.info(f"Deleted job {job_name}")
+        except Exception as e:
+            logger.warning(f"Failed to delete job {job_name}: {str(e)}")
+        
+        # Return appropriate results based on job status
+        if job_status["succeeded"]:
+            return logs_bytes, 0, output_file_path
+        else:
+            return logs_bytes, 1, None
+            
+    except Exception as e:
+        error_msg = f"Kubernetes job error: {str(e)}"
+        logger.error(error_msg)
+        return error_msg.encode("utf-8"), 1, None
 
 
-# Example usage (to be called from another deployment)
+# Example usage to demonstrate the functionality
 def example_usage():
-    job_name = "sample-job-" + str(int(time.time()))
-    namespace = "default"
-    container_image = "ubuntu:20.04"
-    command = ["/bin/sh", "-c", "echo 'Job starting'; date; sleep 5; echo 'Job completed successfully'; exit 0"]
+    # Example CLI arguments for LidarDataManager
+    cli_args = [
+        "-i=/data/LiDAR/0001_Mission_Root/02_LAS_PCD/small_test_file.las",
+        "--format=pcd-ascii"
+    ]
     
-    success, logs = create_and_monitor_job(job_name, namespace, container_image, command)
+    output, exit_code, output_file_path = process_point_cloud(cli_args)
     
-    print(f"Job {'succeeded' if success else 'failed'}")
-    print("Logs:")
-    print(logs)
+    print(f"Job {'succeeded' if exit_code == 0 else 'failed'} with exit code: {exit_code}")
+    print(f"Output file path: {output_file_path}")
+    print("First 200 bytes of output:")
+    print(output[:200])
 
 
-# When running in another deployment, call example_usage()
 if __name__ == "__main__":
-    print("Hello from kubernetes-api-wrapper!")
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    print("Testing LidarDataManager Kubernetes job runner")
     example_usage()
