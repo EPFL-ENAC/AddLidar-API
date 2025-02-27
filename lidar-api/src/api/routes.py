@@ -97,8 +97,8 @@ async def process_point_cloud_endpoint(
                 extension, content_type = format_to_extension[format.lower()]
 
             # Get the full path to the output file
-            full_output_path = os.path.join(settings.ROOT_VOLUME, output_file_path)
-
+            full_output_path = os.path.join(settings.DEFAULT_ROOT, output_file_path)
+            print(output_file_path)
             # Create a filename with the appropriate extension
             original_filename = os.path.basename(output_file_path)
             base_filename = os.path.splitext(original_filename)[0]
@@ -176,7 +176,7 @@ async def process_point_cloud_endpoint(
 
 # Storage for job metadata (in production, use a database)
 JOBS_STORE: Dict[str, Dict[str, Any]] = {}
-OUTPUT_DIR = os.path.join(settings.ROOT_VOLUME, "output")
+OUTPUT_DIR = os.path.join(settings.DEFAULT_ROOT, "output")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
