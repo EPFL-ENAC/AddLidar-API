@@ -310,11 +310,11 @@ async def health_check() -> dict:
     """Check if the API and its dependencies are healthy"""
     # Check Redis connection
     redis_healthy = False
-    try:
-        ping = celery_app.backend.client.ping()
-        redis_healthy = ping
-    except Exception as e:
-        logger.warning(f"Redis health check failed: {e}")
+    # try:
+    #     ping = celery_app.backend.client.ping()
+    #     redis_healthy = ping
+    # except Exception as e:
+    #     logger.warning(f"Redis health check failed: {e}")
 
     return {
         "status": "healthy",
