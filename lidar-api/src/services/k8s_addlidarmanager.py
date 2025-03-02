@@ -69,12 +69,20 @@ def process_point_cloud(cli_args: List[str]) -> Tuple[bytes, int, Optional[str]]
                 persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(
                     claim_name=settings["PVC_NAME"]
                 ),
+            ),
+            client.V1Volume(
+                name="data-output-volume",
+                persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(
+                    claim_name=settings["PVC_OUTPUT_NAME"]
+                ),
             )
         ]
         volume_mounts = [
-            client.V1VolumeMount(name="data-volume", mount_path=settings["MOUNT_PATH"])
+            client.V1VolumeMount(name="data-volume", mount_path=settings["MOUNT_PATH"]),
+            client.V1VolumeMount(name="data-output-volume", mount_path=settings["OUTPUT_PATH"])
         ]
         logger.info(f"Using PVC: {settings['PVC_NAME']}")
+        logger.info(f"Using PVC OUTPOUT: {settings['PVC_OUTPUT_NAME']}")
 
         # Define job container
         container = client.V1Container(
