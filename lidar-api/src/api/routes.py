@@ -12,7 +12,8 @@ from src.services.k8s_addlidarmanager import (
     register_websocket, 
     start_watching_job,
     job_statuses as k8s_job_statuses,
-    create_k8s_job
+    create_k8s_job,
+    active_connections
 )
 from src.api.models import PointCloudRequest, ProcessPointCloudResponse
 

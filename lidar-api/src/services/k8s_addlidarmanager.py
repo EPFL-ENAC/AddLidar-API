@@ -26,6 +26,10 @@ active_connections: Dict[str, Any] = {}
 # Dictionary to control running watch loops
 watch_control: Dict[str, bool] = {}
 
+# Store job statuses in memory
+job_statuses: Dict[str, Dict[str, Any]] = {}
+
+
 def get_settings() -> Dict[str, Any]:
     """
     Get settings from environment variables or use defaults.
@@ -39,13 +43,14 @@ def get_settings() -> Dict[str, Any]:
 job_statuses: Dict[str, Dict[str, Any]] = {}  # Store job statuses in memory
 
 
-def watch_job_status_thread(job_name: str, namespace: str = "default") -> None:
+def watch_job_status_thread(job_name: str, namespace: str, loop: asyncio.AbstractEventLoop) -> None:
     """
     Watches a Kubernetes Job in a separate thread and sends status updates via event loop.
     
     Args:
         job_name: Name of the job to watch
         namespace: Kubernetes namespace where the job exists
+        loop: Event loop to schedule async tasks on
     """
     try:
         batch_v1 = client.BatchV1Api()
@@ -62,29 +67,35 @@ def watch_job_status_thread(job_name: str, namespace: str = "default") -> None:
                 break
                 
             job = event["object"]
+
             if job.metadata.name == job_name:
                 conditions = job.status.conditions
                 if conditions:
+                    logger.info(f"Job status update: {job.metadata.name}, condition: {conditions[0].type}")
                     job_status = conditions[0].type
-                    if job_status == "Complete":
+                    
+                    if job_status in ["Complete", "SuccessCriteriaMet"]:
                         message = f"Job {job_name} Completed"
                         job_statuses[job_name] = {"status": "Complete", "message": message}
-                        # Schedule the async notification on the event loop
+                        logger.info(f"{job.metadata.name}: {job_status}")
+                        
+                        # Use the passed event loop
                         if job_name in active_connections:
                             asyncio.run_coroutine_threadsafe(
                                 notify_websocket(job_name, message), 
-                                asyncio.get_event_loop()
+                                loop
                             )
                         w.stop()
                         break
                     elif job_status == "Failed":
                         message = f"Job {job_name} Failed"
                         job_statuses[job_name] = {"status": "Failed", "message": message}
-                        # Schedule the async notification on the event loop
+                        
+                        # Use the passed event loop
                         if job_name in active_connections:
                             asyncio.run_coroutine_threadsafe(
                                 notify_websocket(job_name, message), 
-                                asyncio.get_event_loop()
+                                loop
                             )
                         w.stop()
                         break
@@ -92,10 +103,10 @@ def watch_job_status_thread(job_name: str, namespace: str = "default") -> None:
         logger.error(f"Error watching job {job_name}: {str(e)}")
         # Attempt to notify about error
         job_statuses[job_name] = {"status": "Error", "message": f"Error watching job: {str(e)}"}
-        if job_name in active_connections:
+        if job_name in active_connections and loop and loop.is_running():
             asyncio.run_coroutine_threadsafe(
                 notify_websocket(job_name, f"Error: {str(e)}"),
-                asyncio.get_event_loop()
+                loop
             )
     finally:
         # Clean up the watch control entry
@@ -152,15 +163,25 @@ def start_watching_job(job_name: str, namespace: str = "default") -> None:
     
     # Initialize job status
     job_statuses[job_name] = {"status": "Running", "message": f"Job {job_name} started"}
-    logger.info(job_statuses)
-    # Start new watch thread
-    thread = threading.Thread(
-        target=watch_job_status_thread,
-        args=(job_name, namespace),
-        daemon=True  # Make thread daemon so it doesn't block program exit
-    )
-    thread.start()
-    logger.info(f"Started job watcher thread for job {job_name}")
+    
+    try:
+        # Capture the current event loop to pass to the thread
+        loop = asyncio.get_event_loop()
+        
+        # Start new watch thread
+        thread = threading.Thread(
+            target=watch_job_status_thread,
+            args=(job_name, namespace, loop),
+            daemon=True
+        )
+        thread.start()
+        logger.info(f"Started job watcher thread for job {job_name}")
+    except RuntimeError as e:
+        logger.error(f"Could not start job watcher: {str(e)}")
+        job_statuses[job_name] = {
+            "status": "Error", 
+            "message": f"Failed to start job watcher: {str(e)}"
+        }
 
 
 def register_websocket(job_name: str, websocket) -> None:
