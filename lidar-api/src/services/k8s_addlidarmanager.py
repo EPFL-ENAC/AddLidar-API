@@ -269,51 +269,6 @@ def create_k8s_job(job_name: str) -> None:
 
         # Create the job
         batch_v1.create_namespaced_job(namespace=settings["NAMESPACE"], body=job)
-        logger.info(f"Created job {job_name}")
-        # # Wait for job completion
-        # w = watch.Watch()
-        # job_succeeded = False
-        # job_failed = False
-
-        # for event in w.stream(
-        #     batch_v1.list_namespaced_job,
-        #     namespace=settings["NAMESPACE"],
-        #     timeout_seconds=60
-        # ):
-        #     if event["object"].metadata.name == job_name:
-        #         job_obj = event["object"]
-        #         if job_obj.status.succeeded:
-        #             job_succeeded = True
-        #             w.stop()
-        #             break
-        #         elif job_obj.status.failed:
-        #             job_failed = True
-        #             w.stop()
-        #             break
-
-        # # Get the pod associated with the job
-        # label_selector = f"job-name={job_name}"
-        # pods = core_v1.list_namespaced_pod(
-        #     namespace=settings["NAMESPACE"],
-        #     label_selector=label_selector
-        # )
-
-        # if not pods.items:
-        #     output = "No pods found for this job"
-        #     exit_code = 1
-        # else:
-        #     pod_name = pods.items[0].metadata.name
-        #     # Get the logs
-        #     output = core_v1.read_namespaced_pod_log(
-        #         name=pod_name,
-        #         namespace=settings["NAMESPACE"]
-        #     )
-        #     exit_code = 0 if job_succeeded else 1
-
-        # # Clean up job
-        # delete_k8s_job(job_name, settings["NAMESPACE"])
-
-        # return output, exit_code
         return job_name
     except Exception as e:
         error_msg = f"Failed to create or run job {job_name}: {str(e)}"
