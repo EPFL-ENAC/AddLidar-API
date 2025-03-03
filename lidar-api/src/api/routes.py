@@ -1,15 +1,23 @@
-from fastapi import APIRouter, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, Response, FileResponse
 from pydantic import ValidationError
 import logging
 import os
 from fastapi.encoders import jsonable_encoder
 import time
-
+import asyncio
+import uuid
+from src.services.k8s_addlidarmanager import (
+    process_point_cloud, 
+    register_websocket, 
+    start_watching_job,
+    job_statuses as k8s_job_statuses,
+    create_k8s_job
+)
 from src.api.models import PointCloudRequest, ProcessPointCloudResponse
 
 # Replace Docker service import with Kubernetes service
-from src.services.k8s_addlidarmanager import process_point_cloud
+# from src.services.k8s_addlidarmanager import process_point_cloud, track_job_status, start_watching_job
 from src.config.settings import settings
 from src.services.parse_docker_error import parse_cli_error
 
@@ -168,16 +176,130 @@ async def process_point_cloud_endpoint(
 @router.get("/health")
 async def health_check() -> dict:
     """Check if the API and its dependencies are healthy"""
-    # Check Redis connection
-    redis_healthy = False
-    # try:
-    #     ping = celery_app.backend.client.ping()
-    #     redis_healthy = ping
-    # except Exception as e:
-    #     logger.warning(f"Redis health check failed: {e}")
-
     return {
         "status": "healthy",
-        "redis": "healthy" if redis_healthy else "unhealthy",
         "timestamp": time.time(),
     }
+
+
+# In-memory storage for job statuses (Use a DB for production)
+
+@router.post("/start-job/")
+async def start_job(background_tasks: BackgroundTasks):
+    """Starts a Kubernetes job and begins watching its status.
+    
+    Returns:
+        dict: Job name and WebSocket URL for status tracking
+    """
+    # Generate a unique job name
+    job_name = f"job-{uuid.uuid4().hex[:8]}"
+    
+    # Create the actual Kubernetes job
+    result = create_k8s_job(job_name)
+    
+    # Start watching the job status in a separate thread
+    start_watching_job(job_name, namespace=settings.NAMESPACE)
+    
+    # Return the job name and the WebSocket URL for status tracking
+    return {
+        "job_name": job_name, 
+        "status_url": f"/ws/job-status/{job_name}"
+    }
+
+@router.get("/job-status/{job_name}")
+async def get_job_status(job_name: str):
+    """Fetch the current status of a job.
+    
+    Args:
+        job_name: Name of the job to check
+        
+    Returns:
+        JSONResponse: Current job status
+    """
+    # Get status from the k8s job status tracking dictionary
+    status = k8s_job_statuses.get(job_name, {})
+    
+    if not status:
+        return JSONResponse(
+            status_code=404,
+            content={"job_name": job_name, "status": "Not Found"}
+        )
+    
+    return JSONResponse(content={
+        "job_name": job_name, 
+        "status": status.get("status", "Unknown"),
+        "message": status.get("message", "")
+    })
+
+@router.websocket("/ws/job-status/{job_name}")
+async def websocket_endpoint(websocket: WebSocket, job_name: str) -> None:
+    """WebSocket endpoint for real-time job status updates.
+    
+    Args:
+        websocket: WebSocket connection
+        job_name: Name of the job to track
+    """
+    try:
+        # Accept the connection first
+        await websocket.accept()
+        
+        # Log connection established
+        logger.info(f"WebSocket connection established for job {job_name}")
+        
+        # Send initial status message
+        initial_status = k8s_job_statuses.get(job_name, {"status": "Pending", "message": f"Tracking job: {job_name}"})
+        await websocket.send_json({
+            "job_name": job_name,
+            "status": initial_status.get("status", "Pending"),
+            "message": initial_status.get("message", f"Tracking job: {job_name}")
+        })
+        
+        # Register this WebSocket with the job watcher
+        register_websocket(job_name, websocket)
+        
+        # Keep the connection alive with a ping-pong mechanism
+        while True:
+            try:
+                # Wait for messages from the client with a timeout
+                data = await asyncio.wait_for(websocket.receive_text(), timeout=30)
+                
+                # If client sends a close message, close the connection gracefully
+                if data == "close":
+                    logger.info(f"Client requested to close WebSocket for job {job_name}")
+                    await websocket.close()
+                    break
+                    
+                # Send current status as a response to any message
+                current_status = k8s_job_statuses.get(job_name, {"status": "Unknown"})
+                await websocket.send_json({
+                    "job_name": job_name,
+                    "status": current_status.get("status", "Unknown"),
+                    "message": current_status.get("message", "")
+                })
+                    
+            except asyncio.TimeoutError:
+                # Send a ping to keep the connection alive
+                current_status = k8s_job_statuses.get(job_name, {"status": "Unknown"})
+                try:
+                    await websocket.send_json({"type": "ping", "job_name": job_name})
+                except Exception:
+                    logger.warning(f"Failed to send ping to WebSocket for job {job_name}, closing connection")
+                    break
+                    
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket client disconnected from job {job_name}")
+    except Exception as e:
+        logger.error(f"WebSocket error for job {job_name}: {str(e)}", exc_info=True)
+    finally:
+        # Always try to close the connection and clean up
+        try:
+            if job_name in active_connections and active_connections[job_name] == websocket:
+                del active_connections[job_name]
+                logger.info(f"Cleaned up WebSocket connection for job {job_name}")
+        except Exception as e:
+            logger.error(f"Error cleaning up WebSocket for job {job_name}: {str(e)}")
+            
+        try:
+            await websocket.close()
+        except Exception:
+            pass

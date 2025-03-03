@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kubernetes Job Manager</title>
+</head>
+<body>
+    <h1>Kubernetes Job Manager</h1>
+    
+    <button id="start-job">Start Job</button>
+    <button id="status-job">get Job status</button>
+    <p id="status"></p>
+    <p id="status_get"></p>
+    <a id="download-link" style="display:none;" href="#" download>Download File</a>
+
+    <script>
+        // Use consistent hostname across HTTP and WebSocket requests
+        const API_HOST = window.location.hostname === "" ? "localhost" : window.location.hostname;
+        const API_PORT = "8000";
+        const API_BASE_URL = `http://${API_HOST}:${API_PORT}`;
+        const WS_BASE_URL = `ws://${API_HOST}:${API_PORT}`;
+
+        let currentJob = null;
+        document.getElementById("status-job").addEventListener("click", async () => {
+            try {
+                const response = await fetch(`${API_BASE_URL}/job-status/${currentJob.job_name}`, { 
+                    method: "GET",
+                    headers: {
+                        "Content-Type": "application/json"
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log(data);
+                document.getElementById("status_get").innerText = `Job started: ${JSON.stringify(data)}; Time: ${new Date().toLocaleString()}`;
+                
+            } catch (error) {
+                document.getElementById("status_get").innerText = `Error: ${error.message}`;
+                console.error("Error starting job:", error);
+            }
+        });
+        document.getElementById("start-job").addEventListener("click", async () => {
+            try {
+                const response = await fetch(`${API_BASE_URL}/start-job/`, { 
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                
+                currentJob = await response.json();
+                
+                if (currentJob.job_name) {
+                    document.getElementById("status").innerText = `Job started: ${currentJob.job_name}`;
+                    listenForUpdates(currentJob.job_name);
+                } else {
+                    document.getElementById("status").innerText = "Failed to start job.";
+                }
+            } catch (error) {
+                document.getElementById("status").innerText = `Error: ${error.message}`;
+                console.error("Error starting job:", error);
+            }
+        });
+
+        function listenForUpdates(jobName) {
+            const ws = new WebSocket(`${WS_BASE_URL}/ws/job-status/${jobName}`);
+ 
+            ws.onopen = () => {
+                document.getElementById('status').innerHTML += '<p>WebSocket connection established</p>';
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    document.getElementById('status').innerHTML += `<p>Message: ${JSON.stringify(data)}</p>`;
+
+                    // Check for completion in the parsed data object
+                    if (data.status === "Complete") {
+                        const downloadLink = document.getElementById("download-link");
+                        downloadLink.href = `${API_BASE_URL}/download/${jobName}`;
+                        downloadLink.style.display = "block";
+                        downloadLink.innerText = "Download Processed File";
+                    }
+                } catch (error) {
+                    document.getElementById('status').innerHTML += `<p>Error parsing message: ${error.message}</p>`;
+                    console.error("WebSocket message parse error:", error);
+                }
+            };
+
+            ws.onerror = (error) => {
+                document.getElementById('status').innerHTML += `<p>WebSocket Error</p>`;
+                console.error('WebSocket error:', error);
+            };
+            
+            ws.onclose = (event) => {
+                document.getElementById('status').innerHTML += `<p>WebSocket connection closed (Code: ${event.code})</p>`;
+            };
+        }
+    </script>
+</body>
+</html>

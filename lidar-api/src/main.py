@@ -3,8 +3,17 @@ from src.api.routes import router
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 import logging
+from fastapi.middleware.cors import CORSMiddleware
+
 
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Configure logging
 logging.basicConfig(
@@ -24,5 +33,13 @@ async def validation_exception_handler(request: Request, exc: ValidationError):
         },
     )
 
+# Optional: Serve the main HTML file at the root
+@app.get("/")
+async def get_index():
+    from fastapi.responses import FileResponse
+    index_path = Path(__file__).parent.parent / "index.html"
+    if index_path.exists():
+        return FileResponse(index_path)
+    return {"message": "Welcome to AddLidar API"}
 
 app.include_router(router)

@@ -1,11 +1,30 @@
 from kubernetes import client, config, watch
 import uuid
 import logging
+import asyncio
 from typing import Tuple, Optional, List, Dict, Any
 from src.config.settings import settings
 
+from kubernetes.watch import Watch
+import threading
+
 logger = logging.getLogger(__name__)
 
+# Load Kubernetes config
+try:
+    config.load_kube_config()
+    logger.info("Using kubeconfig for authentication")
+except Exception as e:
+    logger.info(f"Could not load kubeconfig: {str(e)}")
+    config.load_incluster_config()
+    logger.info("Using in-cluster configuration")
+batch_v1 = client.BatchV1Api()
+
+# Store WebSocket connections
+active_connections: Dict[str, Any] = {}
+
+# Dictionary to control running watch loops
+watch_control: Dict[str, bool] = {}
 
 def get_settings() -> Dict[str, Any]:
     """
@@ -15,6 +34,150 @@ def get_settings() -> Dict[str, Any]:
         Dict[str, Any]: Dictionary of configuration settings
     """
     return settings.dict()
+
+
+job_statuses: Dict[str, Dict[str, Any]] = {}  # Store job statuses in memory
+
+
+def watch_job_status_thread(job_name: str, namespace: str = "default") -> None:
+    """
+    Watches a Kubernetes Job in a separate thread and sends status updates via event loop.
+    
+    Args:
+        job_name: Name of the job to watch
+        namespace: Kubernetes namespace where the job exists
+    """
+    try:
+        batch_v1 = client.BatchV1Api()
+        w = Watch()
+        watch_control[job_name] = True
+        
+        logger.info(f"Started watching job {job_name} in namespace {namespace}")
+        
+        for event in w.stream(batch_v1.list_namespaced_job, namespace=namespace):
+            # Check if we should stop watching
+            if not watch_control.get(job_name, True):
+                logger.info(f"Stopping watch for job {job_name}")
+                w.stop()
+                break
+                
+            job = event["object"]
+            if job.metadata.name == job_name:
+                conditions = job.status.conditions
+                if conditions:
+                    job_status = conditions[0].type
+                    if job_status == "Complete":
+                        message = f"Job {job_name} Completed"
+                        job_statuses[job_name] = {"status": "Complete", "message": message}
+                        # Schedule the async notification on the event loop
+                        if job_name in active_connections:
+                            asyncio.run_coroutine_threadsafe(
+                                notify_websocket(job_name, message), 
+                                asyncio.get_event_loop()
+                            )
+                        w.stop()
+                        break
+                    elif job_status == "Failed":
+                        message = f"Job {job_name} Failed"
+                        job_statuses[job_name] = {"status": "Failed", "message": message}
+                        # Schedule the async notification on the event loop
+                        if job_name in active_connections:
+                            asyncio.run_coroutine_threadsafe(
+                                notify_websocket(job_name, message), 
+                                asyncio.get_event_loop()
+                            )
+                        w.stop()
+                        break
+    except Exception as e:
+        logger.error(f"Error watching job {job_name}: {str(e)}")
+        # Attempt to notify about error
+        job_statuses[job_name] = {"status": "Error", "message": f"Error watching job: {str(e)}"}
+        if job_name in active_connections:
+            asyncio.run_coroutine_threadsafe(
+                notify_websocket(job_name, f"Error: {str(e)}"),
+                asyncio.get_event_loop()
+            )
+    finally:
+        # Clean up the watch control entry
+        if job_name in watch_control:
+            del watch_control[job_name]
+
+
+async def notify_websocket(job_name: str, message: str) -> None:
+    """
+    Send a message to WebSocket client.
+    
+    Args:
+        job_name: The job name associated with the WebSocket
+        message: Message to send to the client
+    """
+    try:
+        if job_name in active_connections:
+            connection = active_connections[job_name]
+            # Send as structured JSON instead of plain text
+            await connection.send_json({
+                "job_name": job_name,
+                "status": job_statuses.get(job_name, {}).get("status", "Unknown"),
+                "message": message
+            })
+            logger.info(f"WebSocket notification sent for job {job_name}: {message}")
+            
+            # Don't automatically close the connection - let the client decide
+            # Only close if job is Complete or Failed
+            job_status = job_statuses.get(job_name, {}).get("status")
+            if job_status in ["Complete", "Failed", "Error"]:
+                await connection.close()
+                logger.info(f"Closed WebSocket for completed job {job_name}")
+                # Clean up the connection reference
+                if job_name in active_connections:
+                    del active_connections[job_name]
+    except Exception as e:
+        logger.error(f"Error notifying WebSocket for job {job_name}: {str(e)}")
+        # Only cleanup if there was an error
+        if job_name in active_connections:
+            del active_connections[job_name]
+
+
+def start_watching_job(job_name: str, namespace: str = "default") -> None:
+    """
+    Starts watching a job in a separate thread.
+    
+    Args:
+        job_name: Name of the job to watch
+        namespace: Kubernetes namespace where the job exists
+    """
+    # Clean up any existing watch for this job
+    if job_name in watch_control:
+        watch_control[job_name] = False
+    
+    # Initialize job status
+    job_statuses[job_name] = {"status": "Running", "message": f"Job {job_name} started"}
+    logger.info(job_statuses)
+    # Start new watch thread
+    thread = threading.Thread(
+        target=watch_job_status_thread,
+        args=(job_name, namespace),
+        daemon=True  # Make thread daemon so it doesn't block program exit
+    )
+    thread.start()
+    logger.info(f"Started job watcher thread for job {job_name}")
+
+
+def register_websocket(job_name: str, websocket) -> None:
+    """
+    Register a WebSocket connection for a job.
+    
+    Args:
+        job_name: The job name to associate the WebSocket with
+        websocket: The WebSocket connection object
+    """
+    active_connections[job_name] = websocket
+    logger.info(f"Registered WebSocket for job {job_name}")
+    
+    # If we already have status for this job, send it immediately
+    if job_name in job_statuses:
+        status = job_statuses[job_name]
+        asyncio.create_task(notify_websocket(job_name, status["message"]))
 
 
 def delete_k8s_job(job_name: str, namespace: str) -> bool:
@@ -39,6 +202,102 @@ def delete_k8s_job(job_name: str, namespace: str) -> bool:
     except Exception as e:
         logger.warning(f"Failed to delete job {job_name}: {str(e)}")
         return False
+
+
+def create_k8s_job(job_name: str) -> None:
+    """
+    Create a Kubernetes job that runs a simple hello world command.
+
+    Args:
+        job_name: Name of the job to create
+
+    Returns:
+        Tuple[str, int]: The output (stdout or stderr) and exit code
+    """
+    settings = get_settings()
+
+    try:
+
+        # Create API clients
+        batch_v1 = client.BatchV1Api()
+        core_v1 = client.CoreV1Api()
+
+        # Define job container with simple echo command
+        container = client.V1Container(
+            name="hello-world",
+            image="busybox",
+            command=["sh", "-c", "echo 'Hello, Kubernetes!' || exit 1"],
+        )
+
+        # Define job
+        job = client.V1Job(
+            api_version="batch/v1",
+            kind="Job",
+            metadata=client.V1ObjectMeta(
+                name=job_name, namespace=settings["NAMESPACE"]
+            ),
+            spec=client.V1JobSpec(
+                template=client.V1PodTemplateSpec(
+                    spec=client.V1PodSpec(
+                        containers=[container], restart_policy="Never"
+                    )
+                ),
+                backoff_limit=0,  # No retries
+            ),
+        )
+
+        # Create the job
+        batch_v1.create_namespaced_job(namespace=settings["NAMESPACE"], body=job)
+        logger.info(f"Created job {job_name}")
+        # # Wait for job completion
+        # w = watch.Watch()
+        # job_succeeded = False
+        # job_failed = False
+
+        # for event in w.stream(
+        #     batch_v1.list_namespaced_job,
+        #     namespace=settings["NAMESPACE"],
+        #     timeout_seconds=60
+        # ):
+        #     if event["object"].metadata.name == job_name:
+        #         job_obj = event["object"]
+        #         if job_obj.status.succeeded:
+        #             job_succeeded = True
+        #             w.stop()
+        #             break
+        #         elif job_obj.status.failed:
+        #             job_failed = True
+        #             w.stop()
+        #             break
+
+        # # Get the pod associated with the job
+        # label_selector = f"job-name={job_name}"
+        # pods = core_v1.list_namespaced_pod(
+        #     namespace=settings["NAMESPACE"],
+        #     label_selector=label_selector
+        # )
+
+        # if not pods.items:
+        #     output = "No pods found for this job"
+        #     exit_code = 1
+        # else:
+        #     pod_name = pods.items[0].metadata.name
+        #     # Get the logs
+        #     output = core_v1.read_namespaced_pod_log(
+        #         name=pod_name,
+        #         namespace=settings["NAMESPACE"]
+        #     )
+        #     exit_code = 0 if job_succeeded else 1
+
+        # # Clean up job
+        # delete_k8s_job(job_name, settings["NAMESPACE"])
+
+        # return output, exit_code
+        return job_name
+    except Exception as e:
+        error_msg = f"Failed to create or run job {job_name}: {str(e)}"
+        logger.error(error_msg)
+        return error_msg, 1
 
 
 def process_point_cloud(cli_args: List[str]) -> Tuple[bytes, int, Optional[str]]:
