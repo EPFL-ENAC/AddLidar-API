@@ -97,7 +97,9 @@ async def process_point_cloud_endpoint(
                 extension, content_type = format_to_extension[format.lower()]
 
             # Get the full path to the output file
-            full_output_path = os.path.join(settings.DEFAULT_OUTPUT_ROOT, output_file_path)
+            full_output_path = os.path.join(
+                settings.DEFAULT_OUTPUT_ROOT, output_file_path
+            )
             logger.info(f"outputfile: {output_file_path}")
             # Create a filename with the appropriate extension
             original_filename = os.path.basename(output_file_path)
