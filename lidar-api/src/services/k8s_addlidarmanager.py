@@ -18,6 +18,30 @@ def get_settings() -> Dict[str, Any]:
     return settings.dict()
 
 
+def delete_k8s_job(job_name: str, namespace: str) -> bool:
+    """
+    Delete a Kubernetes job.
+    
+    Args:
+        job_name: Name of the job to delete
+        namespace: Kubernetes namespace where the job exists
+        
+    Returns:
+        bool: True if deletion was successful, False otherwise
+    """
+    try:
+        batch_v1 = client.BatchV1Api()
+        delete_options = client.V1DeleteOptions(propagation_policy="Background")
+        batch_v1.delete_namespaced_job(
+            name=job_name, namespace=namespace, body=delete_options
+        )
+        logger.info(f"Deleted job {job_name}")
+        return True
+    except Exception as e:
+        logger.warning(f"Failed to delete job {job_name}: {str(e)}")
+        return False
+
+
 def process_point_cloud(cli_args: List[str]) -> Tuple[bytes, int, Optional[str]]:
     """
     Process point cloud data using a Kubernetes job.
@@ -29,6 +53,7 @@ def process_point_cloud(cli_args: List[str]) -> Tuple[bytes, int, Optional[str]]
         Tuple of (output data, exit code, output file path or None)
     """
     settings = get_settings()
+    logger.info(f"Using settings: {settings}")
 
     try:
         # Load Kubernetes config
@@ -45,8 +70,7 @@ def process_point_cloud(cli_args: List[str]) -> Tuple[bytes, int, Optional[str]]
 
         # Generate a unique filename for output
         unique_filename = f"output_{uuid.uuid4().hex}.bin"
-        output_file_path = os.path.join("output", unique_filename)
-        container_output_path = f"{settings['MOUNT_PATH']}/{output_file_path}"
+        container_output_path = f"{settings['OUTPUT_PATH']}/{unique_filename}"
 
         # Add the output file argument to CLI args
         output_args = [f"-o={container_output_path}"]
@@ -83,6 +107,7 @@ def process_point_cloud(cli_args: List[str]) -> Tuple[bytes, int, Optional[str]]
         ]
         logger.info(f"Using PVC: {settings['PVC_NAME']}")
         logger.info(f"Using PVC OUTPOUT: {settings['PVC_OUTPUT_NAME']}")
+
 
         # Define job container
         container = client.V1Container(
@@ -161,24 +186,19 @@ def process_point_cloud(cli_args: List[str]) -> Tuple[bytes, int, Optional[str]]
         logs_bytes = logs.encode("utf-8")
 
         # Clean up job
-        try:
-            delete_options = client.V1DeleteOptions(propagation_policy="Background")
-            batch_v1.delete_namespaced_job(
-                name=job_name, namespace=settings["NAMESPACE"], body=delete_options
-            )
-            logger.info(f"Deleted job {job_name}")
-        except Exception as e:
-            logger.warning(f"Failed to delete job {job_name}: {str(e)}")
+        delete_k8s_job(job_name, settings["NAMESPACE"])
 
         # Return appropriate results based on job status
         if job_status["succeeded"]:
-            return logs_bytes, 0, output_file_path
+            return logs_bytes, 0, unique_filename
         else:
             return logs_bytes, 1, None
 
     except Exception as e:
         error_msg = f"Kubernetes job error: {str(e)}"
         logger.error(error_msg)
+        # Clean up job
+        delete_k8s_job(job_name, settings["NAMESPACE"])
         return error_msg.encode("utf-8"), 1, None
 
 

@@ -2,8 +2,16 @@ from fastapi import FastAPI, Request
 from src.api.routes import router
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
+import logging
 
 app = FastAPI()
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
 
 @app.exception_handler(ValidationError)
