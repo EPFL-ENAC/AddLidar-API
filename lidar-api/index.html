@@ -19,7 +19,7 @@
         // Use consistent hostname across HTTP and WebSocket requests
         const API_BASE_URL = `${window.location.protocol}//${window.location.hostname}:${window.location.port}`;
         const WS_BASE_URL = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.hostname}:${window.location.port}`;
-
+        const PREFIX = window.location.hostname === 'localhost' ? '' : '/api';
         let currentJob = null;
         document.getElementById("status-job").addEventListener("click", async () => {
             try {
