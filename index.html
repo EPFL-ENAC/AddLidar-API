@@ -84,7 +84,7 @@
                     document.getElementById('status').innerHTML += `<p>Message: ${JSON.stringify(data)}</p>`;
 
                     // Check for completion in the parsed data object
-                    if (data.status === "Complete") {
+                    if (data.status === "Complete" || data.status === "SuccessCriteriaMet") {
                         const downloadLink = document.getElementById("download-link");
                         downloadLink.href = `${API_BASE_URL}/download/${jobName}`;
                         downloadLink.style.display = "block";
