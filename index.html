@@ -50,7 +50,13 @@
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json"
-                    }
+                    },
+                    body: JSON.stringify({
+                        file_path: "/LiDAR/0001_Mission_Root/02_LAS_PCD/all_grouped_high_veg_10th_point.las",
+                        outcrs: "EPSG:4326",
+                        line: 1,
+                        format: "pcd-ascii",
+                    })
                 });
                 
                 if (!response.ok) {

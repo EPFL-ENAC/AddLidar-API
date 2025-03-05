@@ -25,6 +25,16 @@ from src.services.parse_docker_error import parse_cli_error
 router = APIRouter()
 logger = logging.getLogger("uvicorn")
 
+# Add cleanup task to delete the output file after response is sent
+def remove_output_file(file_path: str) -> None:
+    try:
+        if os.path.exists(file_path):
+            os.unlink(file_path)
+            logger.info(f"Deleted temporary output file: {file_path}")
+    except Exception as e:
+        logger.error(f"Error deleting output file {file_path}: {str(e)}")
+
+
 
 async def return_file_from_output(file_format: str, output_file_path: str, background_tasks: BackgroundTasks) -> FileResponse:
     # Try to determine content type based on format
@@ -62,25 +72,16 @@ async def return_file_from_output(file_format: str, output_file_path: str, backg
         settings.DEFAULT_OUTPUT_ROOT, output_file_path
     )
     logger.info(f"outputfile: {output_file_path}")
+    logger.info(f"full_output_path: {full_output_path}")
     # Create a filename with the appropriate extension
     original_filename = os.path.basename(output_file_path)
     base_filename = os.path.splitext(original_filename)[0]
     file_name = f"{base_filename}{extension}"
 
-    # Log the file name we're serving
-    logger.debug(f"Serving file {file_name} with content type {content_type}")
-
-    # Add cleanup task to delete the output file after response is sent
-    def remove_output_file(file_path: str) -> None:
-        try:
-            if os.path.exists(file_path):
-                os.unlink(file_path)
-                logger.info(f"Deleted temporary output file: {file_path}")
-        except Exception as e:
-            logger.error(f"Error deleting output file {file_path}: {str(e)}")
-
     background_tasks.add_task(remove_output_file, full_output_path)
 
+    # Log the file name we're serving
+    logger.debug(f"Serving file {file_name} with content type {content_type}")
     return FileResponse(
         path=full_output_path, media_type=content_type, filename=file_name
     )
@@ -128,7 +129,7 @@ async def process_point_cloud_endpoint(
 
         # If exit code is 0, return the file data
         if exit_code == 0 and output_file_path:
-            return_file_from_output(
+            return await return_file_from_output(
                 file_format=format, output_file_path=output_file_path, background_tasks=background_tasks)
 
         # If there was an error, return JSON response
@@ -181,6 +182,13 @@ async def process_point_cloud_endpoint(
                 error_details={"message": "An unexpected error occurred"},
             ).model_dump(),
         )
+    finally:
+        # Remove the output file after sending the response
+        if output_file_path:
+            full_output_path = os.path.join(
+                settings.DEFAULT_OUTPUT_ROOT, output_file_path
+            )
+            background_tasks.add_task(remove_output_file, full_output_path)
 
 
 @router.get("/health")
@@ -247,17 +255,18 @@ async def get_job_file(job_name: str) -> FileResponse:
     """
     job_status = k8s_job_statuses.get(job_name, {})
     job_status_args = job_status.get("args", [])
-    file_format = next((arg.split("=")[1] for arg in job_status_args if arg.startswith("--format=")), None)
-    logger.info(f"file_format: {file_format}")
+    file_format = next((arg.split("=")[1] for arg in job_status_args if arg.startswith("--format=")), ".bin")
+    logger.debug(f"file_format: {file_format}")
     output_file_path = job_status.get("output_path")
-    if not job_status:
+    logger.debug(f"output_file_path: {output_file_path}")
+    if not job_status or not output_file_path:
         return JSONResponse(
             status_code=404,
-            content={"job_name": job_name, "status": "Not Found"}
+            content={"job_name": job_name, "status": "Not Found", "message":
+                     f"Job not found or output file ({output_file_path}) not available"}
         )
-    output_file_path = job_status.get
     return await return_file_from_output(
-        file_format=None, output_file_path=output_file_path, background_tasks=BackgroundTasks()
+        file_format=file_format, output_file_path=output_file_path, background_tasks=BackgroundTasks()
     )
 
 @router.websocket("/ws/job-status/{job_name}")

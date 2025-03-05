@@ -320,7 +320,7 @@ def create_k8s_job(job_name: str) -> None:
             job_name=job_name,
             status="Created",
             message="Job is running",
-            output_path="/output/unique_filename.txt",
+            output_path="unique_filename.txt",
             args=["echo 'Hello, Kubernetes!' > /output/unique_filename.txt || exit 1"]
         ), asyncio.get_event_loop())
         logger.info(f"Created job {job_name}")
