@@ -1,57 +1,107 @@
-# README.md
-
-# README.md
-
 # Lidar API
 
 This project is a FastAPI application that wraps the LidarDataManager CLI, allowing users to process LiDAR point cloud data via HTTP requests. The API runs the CLI inside a Docker container and mounts a volume for data access.
 
 ## Project Structure
 
+
 ```
 lidar-api
-├── src
-│   ├── main.py                # Entry point of the FastAPI application
-│   ├── config
-│   │   └── settings.py        # Configuration settings for the application
-│   ├── api
-│   │   ├── routes.py          # API endpoints definition
-│   │   └── models.py          # Data models for request and response
-│   ├── services
-│   │   └── docker_service.py   # Logic for interacting with Docker
-│   └── utils
-│       └── file_utils.py      # Utility functions for file handling
-├── kubernetes
-│   ├── deployment.yaml         # Kubernetes deployment configuration
-│   └── service.yaml            # Kubernetes service configuration
-├── Dockerfile                  # Instructions to build the Docker image
-├── requirements.txt           # Python dependencies
-├── docker-compose.yml         # Docker Compose configurations
-└── README.md                  # Project documentation
+├── src 
+│ ├── main.py # Entry point of the FastAPI application 
+│ ├── config 
+│ │ └── settings.py # Configuration settings for the application 
+│ ├── api 
+│ │ ├── routes.py # API endpoints definition 
+│ │ └── models.py # Data models for request and response 
+│ ├── services 
+│ │ └── docker_service.py # Logic for interacting with Docker 
+│ └── utils 
+│ └── file_utils.py # Utility functions for file handling 
+├── kubernetes 
+│ ├── deployment.yaml # Kubernetes deployment configuration 
+│ └── service.yaml # Kubernetes service configuration 
+├── Dockerfile # Instructions to build the Docker image 
+├── requirements.txt # Python dependencies 
+├── docker-compose.yml # Docker Compose configurations 
+├── Makefile # Common development commands 
+└── README.md # Project documentation
 ```
+
+# Project documentation
+
+## Requirements
+
+- Python 3.11.5 or higher
+- UV package manager
+- Docker and Docker Compose
+- Redis (for Persistence)
+
+## Environment Variables
+
+The application uses the following environment variables (defined in `settings.py`):
+
+| Variable            | Default Value                       | Description                               |
+|---------------------|-------------------------------------|-------------------------------------------|
+| ENVIRONMENT         | development                         | Deployment environment                     |
+| IMAGE_NAME          | ghcr.io/epfl-enac/lidardatamanager  | Docker image for LiDAR processing          |
+| IMAGE_TAG           | latest                              | Docker image tag                           |
+| ROOT_VOLUME         |                                     | Root volume path (based on PVC)            |
+| NAMESPACE           | epfl-cryos-addlidar-potree-dev      | Kubernetes namespace                       |
+| MOUNT_PATH          | /data                               | Container path for data mounting           |
+| OUTPUT_PATH         | /output                             | Container path for output data             |
+| PVC_OUTPUT_NAME     | lidar-data-output-pvc               | Output PVC name                            |
+| PVC_NAME            | lidar-data-pvc                      | Input data PVC name                        |
+| JOB_TIMEOUT         | 300                                 | Job timeout in seconds                     |
+| DEFAULT_DATA_ROOT   | /data                               | Default root path for input data           |
+| DEFAULT_OUTPUT_ROOT | /output                             | Default root path for output data          |
+
+You can override these settings by creating a `.env` file in the project root.
 
 ## Setup Instructions
 
 1. Clone the repository:
-   ```
+   ```bash
    git clone <repository-url>
    cd lidar-api
-   ```
 
-2. Install the required dependencies:
+2. Install UV package manager if not already installed:
    ```
-   pip install -r requirements.txt
+   pip install uv
+   ```
+3. Sync dependencies using UV:
+   ```
+   uv sync
    ```
 
 3. Build the Docker image:
    ```
-   docker build -t lidar-api .
+   make docker-build
    ```
 
 4. Run the application using Docker Compose:
    ```
    docker-compose up
    ```
+
+# Development
+## Formatting Code
+   ```
+   make format
+   ```
+## Linting
+   ```
+   make lint
+   ```
+## Running Tests
+   ```
+   make test
+   ```
+## Security Scanning
+   ```
+   make scout
+   ```
+
 
 ## Usage
 
@@ -80,13 +130,15 @@ Processes a LiDAR point cloud file using the CLI.
 
 ```bash
 JSON='{"file_path": "/LiDAR/0001_Mission_Root/02_LAS_PCD/all_grouped_high_veg_10th_point.las", "outcrs": "EPSG:4326", "returns": 10, "format": "lasv14"}'
-# GET /process-point-cloud?file_path=/LiDAR/0001_Mission_Root/02_LAS_PCD/all_grouped_high_veg_10th_point.las&outcrs=EPSG:4326&r=10
-
-
 
 curl -G "http://localhost:8000/process-point-cloud" \
   -H "accept: application/json" \
   --data-urlencode "$(echo "$JSON" | jq -r 'to_entries | map("\(.key)=\(.value|@uri)") | join("&")')"
+```
+
+```bash
+# if you want to test locally
+curl -G "http://localhost:8000/process-point-cloud?file_path=%2FLiDAR%2F0001_Mission_Root%2F02_LAS_PCD%2Fall_grouped_high_veg_10th_point.las&outcrs=EPSG%3A4326&line=1&format=pcd-ascii"
 ```
 
 ### Response
@@ -96,4 +148,4 @@ curl -G "http://localhost:8000/process-point-cloud" \
 
 ## License
 
-This project is licensed under the MIT License.
+This project is licensed under the GPLV3
