@@ -4,6 +4,7 @@ import uuid
 import logging
 import asyncio
 from pydantic import BaseModel
+from datetime import datetime
 from typing import Tuple, Optional, List, Dict, Any
 from src.config.settings import settings
 
@@ -34,8 +35,14 @@ class JobStatus(BaseModel):
     job_name: Optional[str]
     status: Optional[str]
     message: Optional[str]
-    output_path: Optional[str] = None
+    timestamp: Optional[datetime] = None
     cli: Optional[List[str]] = None
+    output_path: Optional[str] = None
+    class Config:
+        json_encoders = {
+            # Custom JSON encoder for datetime
+            datetime: lambda dt: dt.isoformat() if dt else None
+        }
 
 
 # Store job statuses in memory
@@ -56,10 +63,11 @@ def update_job_statuses(job_name: str, job_status: JobStatus, loop: asyncio.Abst
     # logger.info("current_status: ", current_status)
     
     # Convert new status to dict
-    new_status = job_status.dict(exclude_unset=True)
+    new_status = job_status.dict(exclude_unset=True, exclude_none=True)
     
     # Merge statuses, preserving existing values for fields not in new_status
     merged_status = {**current_status, **new_status}
+    merged_status["timestamp"] = datetime.now()
     # logger.info("merged_status: ", merged_status)
     # Store the merged status
     job_statuses[job_name] = merged_status
@@ -159,7 +167,14 @@ async def notify_websocket(job_status: JobStatus) -> None:
         if job_name in active_connections:
             connection = active_connections[job_name]
             # Send as structured JSON instead of plain text
-            await connection.send_json(job_status.dict(exclude_unset=True))
+            status_dict = job_status.dict(exclude_unset=True)
+            
+            # Handle datetime serialization explicitly
+            if status_dict.get("timestamp"):
+                status_dict["timestamp"] = status_dict["timestamp"].isoformat()
+                
+            # Send as structured JSON
+            await connection.send_json(status_dict)
             logger.info(f"WebSocket notification sent for job {job_name}: {message}")
             
             # Only close if job is Complete or Failed
