@@ -251,8 +251,141 @@ def delete_k8s_job(job_name: str, namespace: str) -> bool:
         logger.warning(f"Failed to delete job {job_name}: {str(e)}")
         return False
 
+def create_k8s_addlidarmanager_job(job_name: str, unique_filename: str, cli_args: Optional[List[str]]) -> None:
+    """
+    Create a Kubernetes job that runs the LidarDataManager container.
 
-def create_k8s_job(job_name: str) -> None:
+    Args:
+        job_name: Name of the job to create
+        cli_args: CLI arguments to pass to the container
+    
+    Returns:
+        str: The name of the created job
+    """
+    settings = get_settings()
+    container_output_path = f"{settings['OUTPUT_PATH']}/{unique_filename}"
+
+    # Add the output file argument to CLI args
+    output_args = [f"-o={container_output_path}"]
+    full_cli_args = cli_args + output_args
+
+    # The container image to use
+    container_image = f"{settings['IMAGE_NAME']}:{settings['IMAGE_TAG']}"
+
+    logger.info(f"Creating job {job_name} with command: {full_cli_args}")
+    logger.info(f"Using container image: {container_image}")
+
+    # Create API clients
+    batch_v1 = client.BatchV1Api()
+    core_v1 = client.CoreV1Api()
+
+    # Define volume and volume mounts for PVC
+    volumes = [
+        client.V1Volume(
+            name="data-volume",
+            persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(
+                claim_name=settings["PVC_NAME"]
+            ),
+        ),
+        client.V1Volume(
+            name="data-output-volume",
+            persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(
+                claim_name=settings["PVC_OUTPUT_NAME"]
+            ),
+        ),
+    ]
+    volume_mounts = [
+        client.V1VolumeMount(name="data-volume", mount_path=settings["MOUNT_PATH"]),
+        client.V1VolumeMount(
+            name="data-output-volume", mount_path=settings["OUTPUT_PATH"]
+        ),
+    ]
+    logger.info(f"Using PVC: {settings['PVC_NAME']}")
+    logger.info(f"Using PVC OUTPOUT: {settings['PVC_OUTPUT_NAME']}")
+
+    # Define job container
+    container = client.V1Container(
+        name="lidar-container",
+        image=container_image,
+        args=full_cli_args,
+        volume_mounts=volume_mounts,
+    )
+
+    # Define job
+    job = client.V1Job(
+        api_version="batch/v1",
+        kind="Job",
+        metadata=client.V1ObjectMeta(
+            name=job_name, namespace=settings["NAMESPACE"]
+        ),
+        spec=client.V1JobSpec(
+            template=client.V1PodTemplateSpec(
+                spec=client.V1PodSpec(
+                    containers=[container], volumes=volumes, restart_policy="Never"
+                )
+            ),
+            backoff_limit=0,  # No retries
+            ttl_seconds_after_finished=7200,  # Auto-delete job after 2 hour
+        ),
+    )
+
+    # Create the job
+    batch_v1.create_namespaced_job(namespace=settings["NAMESPACE"], body=job)
+    logger.info(f"Created job {job_name}")
+    return job_name
+
+
+def generate_k8s_hello_world(job_name: str, unique_filename: str) -> None:
+    # Create API clients
+    batch_v1 = client.BatchV1Api()
+    settings = get_settings()
+
+    # Define volume and volume mounts for PVC
+    volumes = [
+        client.V1Volume(
+            name="data-output-volume",
+            persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(
+                claim_name=settings["PVC_OUTPUT_NAME"]
+            ),
+        ),
+    ]
+    volume_mounts = [
+        client.V1VolumeMount(
+            name="data-output-volume", mount_path=settings["OUTPUT_PATH"]
+        ),
+    ]
+
+    # Define job container with simple echo command
+    container = client.V1Container(
+        name="hello-world",
+        image="busybox",
+        command=["sh", "-c", f"echo 'Hello, Kubernetes!' > /output/{unique_filename} || exit 1"],
+        volume_mounts=volume_mounts,
+    )
+
+    # Define job
+    job = client.V1Job(
+        api_version="batch/v1",
+        kind="Job",
+        metadata=client.V1ObjectMeta(
+            name=job_name, namespace=settings["NAMESPACE"]
+        ),
+        spec=client.V1JobSpec(
+            template=client.V1PodTemplateSpec(
+                spec=client.V1PodSpec(
+                    containers=[container], volumes=volumes,restart_policy="Never"
+                )
+            ),
+            backoff_limit=0,  # No retries
+            ttl_seconds_after_finished=7200,  # Auto-delete job after 1 hour
+        ),
+    )
+
+    # Create the job
+    batch_v1.create_namespaced_job(namespace=settings["NAMESPACE"], body=job)
+    return job_name
+
+def create_k8s_job(job_name: str, cli_args: Optional[List[str]]) -> None:
     """
     Create a Kubernetes job that runs a simple hello world command.
 
@@ -262,66 +395,18 @@ def create_k8s_job(job_name: str) -> None:
     Returns:
         Tuple[str, int]: The output (stdout or stderr) and exit code
     """
-    settings = get_settings()
+    # settings = get_settings()
 
     try:
-
-        # Create API clients
-        batch_v1 = client.BatchV1Api()
-        core_v1 = client.CoreV1Api()
-
-        # Define volume and volume mounts for PVC
-        volumes = [
-            client.V1Volume(
-                name="data-output-volume",
-                persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(
-                    claim_name=settings["PVC_OUTPUT_NAME"]
-                ),
-            ),
-        ]
-        volume_mounts = [
-            client.V1VolumeMount(
-                name="data-output-volume", mount_path=settings["OUTPUT_PATH"]
-            ),
-        ]
-
-        # Define job container with simple echo command
-        container = client.V1Container(
-            name="hello-world",
-            image="busybox",
-            command=["sh", "-c", "echo 'Hello, Kubernetes!' > /output/unique_filename.txt || exit 1"],
-
-            volume_mounts=volume_mounts,
-        )
-
-
-
-        # Define job
-        job = client.V1Job(
-            api_version="batch/v1",
-            kind="Job",
-            metadata=client.V1ObjectMeta(
-                name=job_name, namespace=settings["NAMESPACE"]
-            ),
-            spec=client.V1JobSpec(
-                template=client.V1PodTemplateSpec(
-                    spec=client.V1PodSpec(
-                        containers=[container], volumes=volumes,restart_policy="Never"
-                    )
-                ),
-                backoff_limit=0,  # No retries
-                ttl_seconds_after_finished=3600,  # Auto-delete job after 1 hour
-            ),
-        )
-
-        # Create the job
-        batch_v1.create_namespaced_job(namespace=settings["NAMESPACE"], body=job)
+        # Generate a unique filename for output
+        unique_filename = f"output_{uuid.uuid4().hex}.txt"
+        generate_k8s_hello_world(job_name, unique_filename)
         update_job_statuses(job_name, JobStatus(
             job_name=job_name,
             status="Created",
             message="Job is running",
-            output_path="unique_filename.txt",
-            args=["echo 'Hello, Kubernetes!' > /output/unique_filename.txt || exit 1"]
+            output_path=unique_filename,
+            args=[f"echo 'Hello, Kubernetes!' > /output/{unique_filename} || exit 1"]
         ), asyncio.get_event_loop())
         logger.info(f"Created job {job_name}")
         return job_name
@@ -345,89 +430,10 @@ def process_point_cloud(cli_args: List[str]) -> Tuple[bytes, int, Optional[str]]
     logger.info(f"Using settings: {settings}")
 
     try:
-        # Load Kubernetes config
-        try:
-            config.load_kube_config()
-            logger.info("Using kubeconfig for authentication")
-        except Exception as e:
-            logger.info(f"Could not load kubeconfig: {str(e)}")
-            config.load_incluster_config()
-            logger.info("Using in-cluster configuration")
-
         # Generate a unique job name
         job_name = f"lidar-job-{uuid.uuid4().hex[:10]}"
-
-        # Generate a unique filename for output
         unique_filename = f"output_{uuid.uuid4().hex}.bin"
-        container_output_path = f"{settings['OUTPUT_PATH']}/{unique_filename}"
-
-        # Add the output file argument to CLI args
-        output_args = [f"-o={container_output_path}"]
-        full_cli_args = cli_args + output_args
-
-        # The container image to use
-        container_image = f"{settings['IMAGE_NAME']}:{settings['IMAGE_TAG']}"
-
-        logger.info(f"Creating job {job_name} with command: {full_cli_args}")
-        logger.info(f"Using container image: {container_image}")
-
-        # Create API clients
-        batch_v1 = client.BatchV1Api()
-        core_v1 = client.CoreV1Api()
-
-        # Define volume and volume mounts for PVC
-        volumes = [
-            client.V1Volume(
-                name="data-volume",
-                persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(
-                    claim_name=settings["PVC_NAME"]
-                ),
-            ),
-            client.V1Volume(
-                name="data-output-volume",
-                persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(
-                    claim_name=settings["PVC_OUTPUT_NAME"]
-                ),
-            ),
-        ]
-        volume_mounts = [
-            client.V1VolumeMount(name="data-volume", mount_path=settings["MOUNT_PATH"]),
-            client.V1VolumeMount(
-                name="data-output-volume", mount_path=settings["OUTPUT_PATH"]
-            ),
-        ]
-        logger.info(f"Using PVC: {settings['PVC_NAME']}")
-        logger.info(f"Using PVC OUTPOUT: {settings['PVC_OUTPUT_NAME']}")
-
-        # Define job container
-        container = client.V1Container(
-            name="lidar-container",
-            image=container_image,
-            args=full_cli_args,
-            volume_mounts=volume_mounts,
-        )
-
-        # Define job
-        job = client.V1Job(
-            api_version="batch/v1",
-            kind="Job",
-            metadata=client.V1ObjectMeta(
-                name=job_name, namespace=settings["NAMESPACE"]
-            ),
-            spec=client.V1JobSpec(
-                template=client.V1PodTemplateSpec(
-                    spec=client.V1PodSpec(
-                        containers=[container], volumes=volumes, restart_policy="Never"
-                    )
-                ),
-                backoff_limit=0,  # No retries
-                ttl_seconds_after_finished=3600,  # Auto-delete job after 1 hour
-            ),
-        )
-
-        # Create the job
-        batch_v1.create_namespaced_job(namespace=settings["NAMESPACE"], body=job)
-
+        create_k8s_addlidarmanager_job(job_name, unique_filename, cli_args)
         # Wait for job completion
         job_status = {"succeeded": False, "failed": False}
         w = Watch()
@@ -457,6 +463,7 @@ def process_point_cloud(cli_args: List[str]) -> Tuple[bytes, int, Optional[str]]
 
         # Get the pod associated with the job
         label_selector = f"job-name={job_name}"
+        core_v1 = client.CoreV1Api()
         pods = core_v1.list_namespaced_pod(
             namespace=settings["NAMESPACE"], label_selector=label_selector
         )

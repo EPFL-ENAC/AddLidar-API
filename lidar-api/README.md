@@ -136,6 +136,11 @@ curl -G "http://localhost:8000/process-point-cloud" \
   --data-urlencode "$(echo "$JSON" | jq -r 'to_entries | map("\(.key)=\(.value|@uri)") | join("&")')"
 ```
 
+```bash
+# if you want to test locally
+curl -G "http://localhost:8000/process-point-cloud?file_path=%2FLiDAR%2F0001_Mission_Root%2F02_LAS_PCD%2Fall_grouped_high_veg_10th_point.las&outcrs=EPSG%3A4326&line=1&format=pcd-ascii"
+```
+
 ### Response
 
 - **Success (`200 OK`)**: CLI output

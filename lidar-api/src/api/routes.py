@@ -203,26 +203,56 @@ async def health_check() -> dict:
 # In-memory storage for job statuses (Use a DB for production)
 
 @router.post("/start-job/")
-async def start_job(background_tasks: BackgroundTasks):
+async def start_job(payload: PointCloudRequest, background_tasks: BackgroundTasks):
     """Starts a Kubernetes job and begins watching its status.
+    
+    Args:
+        payload: PointCloudRequest containing job parameters
     
     Returns:
         dict: Job name and WebSocket URL for status tracking
     """
-    # Generate a unique job name
-    job_name = f"job-{uuid.uuid4().hex[:8]}"
-    
-    # Create the actual Kubernetes job
-    job_name = create_k8s_job(job_name)
-    
-    # Start watching the job status in a separate thread
-    start_watching_job(job_name, namespace=settings.NAMESPACE)
-    
-    # Return the job name and the WebSocket URL for status tracking
-    return {
-        "job_name": job_name, 
-        "status_url": f"/ws/job-status/{job_name}"
-    }
+    try:
+        # Generate a unique job name
+        job_name = f"job-{uuid.uuid4().hex[:8]}"
+        
+        # Convert payload to CLI arguments
+        cli_args = payload.to_cli_arguments()
+        logger.debug(f"CLI arguments for job {job_name}: {cli_args}")
+        
+        # Create the actual Kubernetes job
+        job_name = create_k8s_job(job_name, cli_args)
+        
+        # Start watching the job status in a separate thread
+        start_watching_job(job_name, namespace=settings.NAMESPACE)
+        
+        # Return the job name and the WebSocket URL for status tracking
+        return {
+            "job_name": job_name, 
+            "status_url": f"/ws/job-status/{job_name}"
+        }
+    except ValidationError as e:
+        logger.error(f"Validation error: {str(e)}")
+        return JSONResponse(
+            status_code=400,
+            content=ProcessPointCloudResponse(
+                status="error",
+                output=str(e),
+                error_type="validation_error",
+                error_details={"errors": jsonable_encoder(e.errors())},
+            ).model_dump(),
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content=ProcessPointCloudResponse(
+                status="error",
+                output=str(e),
+                error_type="internal_error",
+                error_details={"message": "An unexpected error occurred"},
+            ).model_dump(),
+        )
 
 @router.get("/job-status/{job_name}")
 async def get_job_status(job_name: str):
