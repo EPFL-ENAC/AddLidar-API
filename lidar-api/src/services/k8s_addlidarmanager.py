@@ -36,7 +36,7 @@ class JobStatus(BaseModel):
     status: Optional[str]
     message: Optional[str]
     timestamp: Optional[datetime] = None
-    cli: Optional[List[str]] = None
+    cli_args: Optional[List[str]] = None
     output_path: Optional[str] = None
     class Config:
         json_encoders = {
@@ -266,7 +266,7 @@ def delete_k8s_job(job_name: str, namespace: str) -> bool:
         logger.warning(f"Failed to delete job {job_name}: {str(e)}")
         return False
 
-def create_k8s_addlidarmanager_job(job_name: str, unique_filename: str, cli_args: Optional[List[str]]) -> None:
+def generate_k8s_addlidarmanager_job(job_name: str, unique_filename: str, cli_args: Optional[List[str]]) -> None:
     """
     Create a Kubernetes job that runs the LidarDataManager container.
 
@@ -414,14 +414,54 @@ def create_k8s_job(job_name: str, cli_args: Optional[List[str]]) -> None:
 
     try:
         # Generate a unique filename for output
-        unique_filename = f"output_{uuid.uuid4().hex}.txt"
+        unique_filename = f"output_{uuid.uuid4().hex}.bin"
+        generate_k8s_addlidarmanager_job(job_name, unique_filename, cli_args)
+        update_job_statuses(job_name, JobStatus(
+            job_name=job_name,
+            status="Created",
+            message="Job is running",
+            output_path=unique_filename,
+            cli_args=cli_args
+        ), asyncio.get_event_loop())
+        logger.info(f"Created job {job_name}, output will be saved to {unique_filename}, cli_args: {cli_args}")
+        # generate_k8s_hello_world(job_name, unique_filename)
+        # update_job_statuses(job_name, JobStatus(
+        #     job_name=job_name,
+        #     status="Created",
+        #     message="Job is running",
+        #     output_path=unique_filename,
+        #     args=[f"echo 'Hello, Kubernetes!' > /output/{unique_filename} || exit 1"]
+        # ), asyncio.get_event_loop())
+        logger.info(f"Created job {job_name}")
+        return job_name
+    except Exception as e:
+        error_msg = f"Failed to create or run job {job_name}: {str(e)}"
+        logger.error(error_msg)
+        return error_msg, 1
+
+
+def create_k8s_hello_world_job(job_name: str, cli_args: Optional[List[str]]) -> None:
+    """
+    Create a Kubernetes job that runs a simple hello world command.
+
+    Args:
+        job_name: Name of the job to create
+
+    Returns:
+        Tuple[str, int]: The output (stdout or stderr) and exit code
+    """
+    # settings = get_settings()
+
+    try:
+        # Generate a unique filename for output
+        unique_filename = f"output_{uuid.uuid4().hex}.bin"
         generate_k8s_hello_world(job_name, unique_filename)
         update_job_statuses(job_name, JobStatus(
             job_name=job_name,
             status="Created",
             message="Job is running",
             output_path=unique_filename,
-            args=[f"echo 'Hello, Kubernetes!' > /output/{unique_filename} || exit 1"]
+            cli_args=[f"echo 'Hello, Kubernetes!' > /output/{unique_filename} || exit 1"]
         ), asyncio.get_event_loop())
         logger.info(f"Created job {job_name}")
         return job_name
@@ -448,7 +488,7 @@ def process_point_cloud(cli_args: List[str]) -> Tuple[bytes, int, Optional[str]]
         # Generate a unique job name
         job_name = f"lidar-job-{uuid.uuid4().hex[:10]}"
         unique_filename = f"output_{uuid.uuid4().hex}.bin"
-        create_k8s_addlidarmanager_job(job_name, unique_filename, cli_args)
+        generate_k8s_addlidarmanager_job(job_name, unique_filename, cli_args)
         # Wait for job completion
         job_status = {"succeeded": False, "failed": False}
         w = Watch()

@@ -284,11 +284,11 @@ async def get_job_file(job_name: str) -> FileResponse:
     """Download the output file from a job.
     """
     job_status = k8s_job_statuses.get(job_name, {})
-    job_status_args = job_status.get("args", [])
-    file_format = next((arg.split("=")[1] for arg in job_status_args if arg.startswith("--format=")), ".bin")
-    logger.debug(f"file_format: {file_format}")
+    job_status_args = job_status.get("cli_args", [])
+    file_format = next((arg.split("=")[1] for arg in job_status_args if arg.startswith("-f=")), ".bin")
+    logger.info(f"job_status: {job_status}")
     output_file_path = job_status.get("output_path")
-    logger.debug(f"output_file_path: {output_file_path}")
+    logger.info(f"output_file_path: {output_file_path}")
     if not job_status or not output_file_path:
         return JSONResponse(
             status_code=404,
