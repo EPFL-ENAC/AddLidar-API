@@ -102,6 +102,7 @@ async def process_point_cloud_endpoint(
     outcrs: str | None = None,
     incrs: str | None = None,
 ) -> Response:
+    output_file_path = None
     try:
         # Convert query params to PointCloudRequest model
         request = PointCloudRequest(
@@ -295,7 +296,7 @@ async def get_job_file(
             None,
         )
         if file_format not in format_to_extension:
-            file_format = ".txt"
+            file_format = ".bin"
         logger.info(f"job_status: {job_status}")
         output_file_path = job_status.get("output_path")
         logger.info(f"output_file_path: {output_file_path}")
