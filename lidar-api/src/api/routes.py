@@ -25,10 +25,26 @@ from src.services.parse_docker_error import parse_cli_error
 router = APIRouter()
 logger = logging.getLogger("uvicorn")
 
+# Map format to appropriate file extension and content type
+format_to_extension = {
+    "pcd-ascii": (".pcd", "text/plain"),
+    "pcd-binary": (".pcd", "application/octet-stream"),
+    "lasv14": (".las", "application/octet-stream"),
+    "las": (".las", "application/octet-stream"),
+    "laz": (".laz", "application/octet-stream"),
+    "ply": (".ply", "application/octet-stream"),
+    "ply-ascii": (".ply", "text/plain"),
+    "ply-binary": (".ply", "application/octet-stream"),
+    "xyz": (".xyz", "text/plain"),
+    "txt": (".txt", "text/plain"),
+    "csv": (".csv", "text/csv"),
+}
+
 
 # Add cleanup task to delete the output file after response is sent
 def remove_output_file(file_path: str) -> None:
     try:
+        logger.info("Removing output file: %s", file_path)
         if os.path.exists(file_path):
             os.unlink(file_path)
             logger.info(f"Deleted temporary output file: {file_path}")
@@ -37,25 +53,10 @@ def remove_output_file(file_path: str) -> None:
 
 
 async def return_file_from_output(
-    file_format: str, output_file_path: str, background_tasks: BackgroundTasks
+    file_format: str, output_file_path: str
 ) -> FileResponse:
     # Try to determine content type based on format
     content_type = "application/octet-stream"
-
-    # Map format to appropriate file extension and content type
-    format_to_extension = {
-        "pcd-ascii": (".pcd", "text/plain"),
-        "pcd-binary": (".pcd", "application/octet-stream"),
-        "lasv14": (".las", "application/octet-stream"),
-        "las": (".las", "application/octet-stream"),
-        "laz": (".laz", "application/octet-stream"),
-        "ply": (".ply", "application/octet-stream"),
-        "ply-ascii": (".ply", "text/plain"),
-        "ply-binary": (".ply", "application/octet-stream"),
-        "xyz": (".xyz", "text/plain"),
-        "txt": (".txt", "text/plain"),
-        "csv": (".csv", "text/csv"),
-    }
 
     # Default extension and content type
     extension = ".bin"
@@ -77,8 +78,6 @@ async def return_file_from_output(
     original_filename = os.path.basename(output_file_path)
     base_filename = os.path.splitext(original_filename)[0]
     file_name = f"{base_filename}{extension}"
-
-    background_tasks.add_task(remove_output_file, full_output_path)
 
     # Log the file name we're serving
     logger.debug(f"Serving file {file_name} with content type {content_type}")
@@ -132,7 +131,6 @@ async def process_point_cloud_endpoint(
             return await return_file_from_output(
                 file_format=format,
                 output_file_path=output_file_path,
-                background_tasks=background_tasks,
             )
 
         # If there was an error, return JSON response
@@ -207,7 +205,7 @@ async def health_check() -> dict:
 
 
 @router.post("/start-job/")
-async def start_job(payload: PointCloudRequest, background_tasks: BackgroundTasks):
+async def start_job(payload: PointCloudRequest):
     """Starts a Kubernetes job and begins watching its status.
 
     Args:
@@ -284,30 +282,53 @@ async def get_job_status(job_name: str):
 
 
 @router.get("/download/{job_name}")
-async def get_job_file(job_name: str) -> FileResponse:
+async def get_job_file(
+    background_tasks: BackgroundTasks, job_name: str
+) -> FileResponse:
     """Download the output file from a job."""
-    job_status = k8s_job_statuses.get(job_name, {})
-    job_status_args = job_status.get("cli_args", [])
-    file_format = next(
-        (arg.split("=")[1] for arg in job_status_args if arg.startswith("-f=")), ".bin"
-    )
-    logger.info(f"job_status: {job_status}")
-    output_file_path = job_status.get("output_path")
-    logger.info(f"output_file_path: {output_file_path}")
-    if not job_status or not output_file_path:
+    try:
+
+        job_status = k8s_job_statuses.get(job_name, {})
+        job_status_args = job_status.get("cli_args", [])
+        file_format = next(
+            (arg.split("=")[1] for arg in job_status_args if arg.startswith("-f=")),
+            None,
+        )
+        if file_format not in format_to_extension:
+            file_format = ".txt"
+        logger.info(f"job_status: {job_status}")
+        output_file_path = job_status.get("output_path")
+        logger.info(f"output_file_path: {output_file_path}")
+        if not job_status or not output_file_path:
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "job_name": job_name,
+                    "status": "Not Found",
+                    "message": f"Job not found or output file ({output_file_path}) not available",
+                },
+            )
+        return await return_file_from_output(
+            file_format=file_format,
+            output_file_path=output_file_path,
+        )
+    except Exception as e:
+        logger.error(f"Error downloading file for job {job_name}: {str(e)}")
         return JSONResponse(
-            status_code=404,
+            status_code=500,
             content={
                 "job_name": job_name,
-                "status": "Not Found",
-                "message": f"Job not found or output file ({output_file_path}) not available",
+                "status": "Error",
+                "message": f"Error downloading file: {str(e)}",
             },
         )
-    return await return_file_from_output(
-        file_format=file_format,
-        output_file_path=output_file_path,
-        background_tasks=BackgroundTasks(),
-    )
+    finally:
+        # Remove the output file after sending the response
+        if output_file_path:
+            full_output_path = os.path.join(
+                settings.DEFAULT_OUTPUT_ROOT, output_file_path
+            )
+            background_tasks.add_task(remove_output_file, full_output_path)
 
 
 @router.websocket("/ws/job-status/{job_name}")
