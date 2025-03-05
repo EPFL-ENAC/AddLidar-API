@@ -8,12 +8,12 @@ import time
 import asyncio
 import uuid
 from src.services.k8s_addlidarmanager import (
-    process_point_cloud, 
-    register_websocket, 
+    process_point_cloud,
+    register_websocket,
     start_watching_job,
     job_statuses as k8s_job_statuses,
     create_k8s_job,
-    active_connections
+    active_connections,
 )
 from src.api.models import PointCloudRequest, ProcessPointCloudResponse
 
@@ -25,6 +25,7 @@ from src.services.parse_docker_error import parse_cli_error
 router = APIRouter()
 logger = logging.getLogger("uvicorn")
 
+
 # Add cleanup task to delete the output file after response is sent
 def remove_output_file(file_path: str) -> None:
     try:
@@ -35,8 +36,9 @@ def remove_output_file(file_path: str) -> None:
         logger.error(f"Error deleting output file {file_path}: {str(e)}")
 
 
-
-async def return_file_from_output(file_format: str, output_file_path: str, background_tasks: BackgroundTasks) -> FileResponse:
+async def return_file_from_output(
+    file_format: str, output_file_path: str, background_tasks: BackgroundTasks
+) -> FileResponse:
     # Try to determine content type based on format
     content_type = "application/octet-stream"
 
@@ -68,9 +70,7 @@ async def return_file_from_output(file_format: str, output_file_path: str, backg
         raise TypeError("output_file_path must be a string")
 
     # Get the full path to the output file
-    full_output_path = os.path.join(
-        settings.DEFAULT_OUTPUT_ROOT, output_file_path
-    )
+    full_output_path = os.path.join(settings.DEFAULT_OUTPUT_ROOT, output_file_path)
     logger.info(f"outputfile: {output_file_path}")
     logger.info(f"full_output_path: {full_output_path}")
     # Create a filename with the appropriate extension
@@ -130,7 +130,10 @@ async def process_point_cloud_endpoint(
         # If exit code is 0, return the file data
         if exit_code == 0 and output_file_path:
             return await return_file_from_output(
-                file_format=format, output_file_path=output_file_path, background_tasks=background_tasks)
+                file_format=format,
+                output_file_path=output_file_path,
+                background_tasks=background_tasks,
+            )
 
         # If there was an error, return JSON response
         error_message = output.decode("utf-8", errors="replace")
@@ -202,35 +205,33 @@ async def health_check() -> dict:
 
 # In-memory storage for job statuses (Use a DB for production)
 
+
 @router.post("/start-job/")
 async def start_job(payload: PointCloudRequest, background_tasks: BackgroundTasks):
     """Starts a Kubernetes job and begins watching its status.
-    
+
     Args:
         payload: PointCloudRequest containing job parameters
-    
+
     Returns:
         dict: Job name and WebSocket URL for status tracking
     """
     try:
         # Generate a unique job name
         job_name = f"job-{uuid.uuid4().hex[:8]}"
-        
+
         # Convert payload to CLI arguments
         cli_args = payload.to_cli_arguments()
         logger.debug(f"CLI arguments for job {job_name}: {cli_args}")
-        
+
         # Create the actual Kubernetes job
         job_name = create_k8s_job(job_name, cli_args)
-        
+
         # Start watching the job status in a separate thread
         start_watching_job(job_name, namespace=settings.NAMESPACE)
-        
+
         # Return the job name and the WebSocket URL for status tracking
-        return {
-            "job_name": job_name, 
-            "status_url": f"/ws/job-status/{job_name}"
-        }
+        return {"job_name": job_name, "status_url": f"/ws/job-status/{job_name}"}
     except ValidationError as e:
         logger.error(f"Validation error: {str(e)}")
         return JSONResponse(
@@ -254,55 +255,65 @@ async def start_job(payload: PointCloudRequest, background_tasks: BackgroundTask
             ).model_dump(),
         )
 
+
 @router.get("/job-status/{job_name}")
 async def get_job_status(job_name: str):
     """Fetch the current status of a job.
-    
+
     Args:
         job_name: Name of the job to check
-        
+
     Returns:
         JSONResponse: Current job status
     """
     # Get status from the k8s job status tracking dictionary
     status = k8s_job_statuses.get(job_name, {})
-    
+
     if not status:
         return JSONResponse(
-            status_code=404,
-            content={"job_name": job_name, "status": "Not Found"}
+            status_code=404, content={"job_name": job_name, "status": "Not Found"}
         )
-    
-    return JSONResponse(content={
-        "job_name": job_name, 
-        "status": status.get("status", "Unknown"),
-        "message": status.get("message", "")
-    })
+
+    return JSONResponse(
+        content={
+            "job_name": job_name,
+            "status": status.get("status", "Unknown"),
+            "message": status.get("message", ""),
+        }
+    )
+
 
 @router.get("/download/{job_name}")
 async def get_job_file(job_name: str) -> FileResponse:
-    """Download the output file from a job.
-    """
+    """Download the output file from a job."""
     job_status = k8s_job_statuses.get(job_name, {})
     job_status_args = job_status.get("cli_args", [])
-    file_format = next((arg.split("=")[1] for arg in job_status_args if arg.startswith("-f=")), ".bin")
+    file_format = next(
+        (arg.split("=")[1] for arg in job_status_args if arg.startswith("-f=")), ".bin"
+    )
     logger.info(f"job_status: {job_status}")
     output_file_path = job_status.get("output_path")
     logger.info(f"output_file_path: {output_file_path}")
     if not job_status or not output_file_path:
         return JSONResponse(
             status_code=404,
-            content={"job_name": job_name, "status": "Not Found", "message":
-                     f"Job not found or output file ({output_file_path}) not available"}
+            content={
+                "job_name": job_name,
+                "status": "Not Found",
+                "message": f"Job not found or output file ({output_file_path}) not available",
+            },
         )
     return await return_file_from_output(
-        file_format=file_format, output_file_path=output_file_path, background_tasks=BackgroundTasks()
+        file_format=file_format,
+        output_file_path=output_file_path,
+        background_tasks=BackgroundTasks(),
     )
+
 
 @router.websocket("/ws/job-status/{job_name}")
 async def websocket_endpoint(websocket: WebSocket, job_name: str) -> None:
     """WebSocket endpoint for real-time job status updates.
-    
+
     Args:
         websocket: WebSocket connection
         job_name: Name of the job to track
@@ -310,50 +321,60 @@ async def websocket_endpoint(websocket: WebSocket, job_name: str) -> None:
     try:
         # Accept the connection first
         await websocket.accept()
-        
+
         # Log connection established
         logger.info(f"WebSocket connection established for job {job_name}")
-        
+
         # Send initial status message
-        initial_status = k8s_job_statuses.get(job_name, {"status": "Pending", "message": f"Tracking job: {job_name}"})
-        await websocket.send_json({
-            "job_name": job_name,
-            "status": initial_status.get("status", "Pending"),
-            "message": initial_status.get("message", f"Tracking job: {job_name}")
-        })
-        
+        initial_status = k8s_job_statuses.get(
+            job_name, {"status": "Pending", "message": f"Tracking job: {job_name}"}
+        )
+        await websocket.send_json(
+            {
+                "job_name": job_name,
+                "status": initial_status.get("status", "Pending"),
+                "message": initial_status.get("message", f"Tracking job: {job_name}"),
+            }
+        )
+
         # Register this WebSocket with the job watcher
         register_websocket(job_name, websocket)
-        
+
         # Keep the connection alive with a ping-pong mechanism
         while True:
             try:
                 # Wait for messages from the client with a timeout
                 data = await asyncio.wait_for(websocket.receive_text(), timeout=30)
-                
+
                 # If client sends a close message, close the connection gracefully
                 if data == "close":
-                    logger.info(f"Client requested to close WebSocket for job {job_name}")
+                    logger.info(
+                        f"Client requested to close WebSocket for job {job_name}"
+                    )
                     await websocket.close()
                     break
-                    
+
                 # Send current status as a response to any message
                 current_status = k8s_job_statuses.get(job_name, {"status": "Unknown"})
-                await websocket.send_json({
-                    "job_name": job_name,
-                    "status": current_status.get("status", "Unknown"),
-                    "message": current_status.get("message", "")
-                })
-                    
+                await websocket.send_json(
+                    {
+                        "job_name": job_name,
+                        "status": current_status.get("status", "Unknown"),
+                        "message": current_status.get("message", ""),
+                    }
+                )
+
             except asyncio.TimeoutError:
                 # Send a ping to keep the connection alive
                 current_status = k8s_job_statuses.get(job_name, {"status": "Unknown"})
                 try:
                     await websocket.send_json({"type": "ping", "job_name": job_name})
                 except Exception:
-                    logger.warning(f"Failed to send ping to WebSocket for job {job_name}, closing connection")
+                    logger.warning(
+                        f"Failed to send ping to WebSocket for job {job_name}, closing connection"
+                    )
                     break
-                    
+
     except WebSocketDisconnect:
         logger.info(f"WebSocket client disconnected from job {job_name}")
     except Exception as e:
@@ -361,12 +382,15 @@ async def websocket_endpoint(websocket: WebSocket, job_name: str) -> None:
     finally:
         # Always try to close the connection and clean up
         try:
-            if job_name in active_connections and active_connections[job_name] == websocket:
+            if (
+                job_name in active_connections
+                and active_connections[job_name] == websocket
+            ):
                 del active_connections[job_name]
                 logger.info(f"Cleaned up WebSocket connection for job {job_name}")
         except Exception as e:
             logger.error(f"Error cleaning up WebSocket for job {job_name}: {str(e)}")
-            
+
         try:
             await websocket.close()
         except Exception:
