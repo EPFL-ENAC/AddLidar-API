@@ -1,11 +1,11 @@
-from kubernetes import client, config, watch
+from kubernetes import client, config
+from kubernetes.watch import Watch
 import uuid
 import logging
 import asyncio
 from typing import Tuple, Optional, List, Dict, Any
 from src.config.settings import settings
 
-from kubernetes.watch import Watch
 import threading
 
 logger = logging.getLogger(__name__)
@@ -85,6 +85,8 @@ def watch_job_status_thread(job_name: str, namespace: str, loop: asyncio.Abstrac
                                 notify_websocket(job_name, message), 
                                 loop
                             )
+                        # Probably should delete the job here
+                        delete_k8s_job(job_name, namespace)
                         w.stop()
                         break
                     elif job_status == "Failed":
@@ -97,6 +99,8 @@ def watch_job_status_thread(job_name: str, namespace: str, loop: asyncio.Abstrac
                                 notify_websocket(job_name, message), 
                                 loop
                             )
+                        # Probably should delete the job here
+                        delete_k8s_job(job_name, namespace)
                         w.stop()
                         break
     except Exception as e:
@@ -264,6 +268,7 @@ def create_k8s_job(job_name: str) -> None:
                     )
                 ),
                 backoff_limit=0,  # No retries
+                ttl_seconds_after_finished=3600,  # Auto-delete job after 1 hour
             ),
         )
 
@@ -375,7 +380,7 @@ def process_point_cloud(cli_args: List[str]) -> Tuple[bytes, int, Optional[str]]
 
         # Wait for job completion
         job_status = {"succeeded": False, "failed": False}
-        w = watch.Watch()
+        w = Watch()
 
         logger.info(
             f"Waiting for job {job_name} to complete (timeout: {settings['JOB_TIMEOUT']}s)..."
