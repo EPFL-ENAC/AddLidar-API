@@ -196,7 +196,7 @@ async def start_job(background_tasks: BackgroundTasks):
     job_name = f"job-{uuid.uuid4().hex[:8]}"
     
     # Create the actual Kubernetes job
-    result = create_k8s_job(job_name)
+    job_name = create_k8s_job(job_name)
     
     # Start watching the job status in a separate thread
     start_watching_job(job_name, namespace=settings.NAMESPACE)

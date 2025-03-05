@@ -3,6 +3,7 @@ from kubernetes.watch import Watch
 import uuid
 import logging
 import asyncio
+from pydantic import BaseModel
 from typing import Tuple, Optional, List, Dict, Any
 from src.config.settings import settings
 
@@ -26,9 +27,53 @@ active_connections: Dict[str, Any] = {}
 # Dictionary to control running watch loops
 watch_control: Dict[str, bool] = {}
 
+AUTHORIZED_STATUSES = ["Complete", "SuccessCriteriaMet", "Failed"]
+
+class JobStatus(BaseModel):
+    """Model representing the status of a job."""
+    job_name: Optional[str]
+    status: Optional[str]
+    message: Optional[str]
+    output_path: Optional[str] = None
+    cli: Optional[List[str]] = None
+
+
 # Store job statuses in memory
 job_statuses: Dict[str, Dict[str, Any]] = {}
 
+
+def update_job_statuses(job_name: str, job_status: JobStatus, loop: asyncio.AbstractEventLoop) -> None:
+    """
+    Update the status of a job in the job_statuses dictionary.
+    Only updates fields that are provided in the new status, preserving existing values.
+    
+    Args:
+        job_name: Name of the job to update
+        job_status: Status information for the job
+    """
+    # Get current job status if it exists
+    current_status = job_statuses.get(job_name, {})
+    # logger.info("current_status: ", current_status)
+    
+    # Convert new status to dict
+    new_status = job_status.dict(exclude_unset=True)
+    
+    # Merge statuses, preserving existing values for fields not in new_status
+    merged_status = {**current_status, **new_status}
+    # logger.info("merged_status: ", merged_status)
+    # Store the merged status
+    job_statuses[job_name] = merged_status
+
+    # Use the passed event loop
+    # Convert back to JobStatus before passing to notify_websocket
+    status_object = JobStatus(**merged_status)
+    if job_name in active_connections:
+        asyncio.run_coroutine_threadsafe(
+            notify_websocket(status_object), 
+            loop
+        )
+    
+    # logger.debug(f"Updated job status for {job_name}: {merged_status}")
 
 def get_settings() -> Dict[str, Any]:
     """
@@ -38,9 +83,6 @@ def get_settings() -> Dict[str, Any]:
         Dict[str, Any]: Dictionary of configuration settings
     """
     return settings.dict()
-
-
-job_statuses: Dict[str, Dict[str, Any]] = {}  # Store job statuses in memory
 
 
 def watch_job_status_thread(job_name: str, namespace: str, loop: asyncio.AbstractEventLoop) -> None:
@@ -70,88 +112,74 @@ def watch_job_status_thread(job_name: str, namespace: str, loop: asyncio.Abstrac
 
             if job.metadata.name == job_name:
                 conditions = job.status.conditions
+                if (job.status.active == 1):
+                    update_job_statuses(job_name, JobStatus(
+                        job_name=job_name,
+                        status="Running",
+                        message="Job is running",
+                    ), loop)
                 if conditions:
-                    logger.info(f"Job status update: {job.metadata.name}, condition: {conditions[0].type}")
-                    job_status = conditions[0].type
-                    
-                    if job_status in ["Complete", "SuccessCriteriaMet"]:
-                        message = f"Job {job_name} Completed"
-                        job_statuses[job_name] = {"status": "Complete", "message": message}
-                        logger.info(f"{job.metadata.name}: {job_status}")
-                        
-                        # Use the passed event loop
-                        if job_name in active_connections:
-                            asyncio.run_coroutine_threadsafe(
-                                notify_websocket(job_name, message), 
-                                loop
-                            )
-                        # Probably should delete the job here
-                        delete_k8s_job(job_name, namespace)
-                        w.stop()
-                        break
-                    elif job_status == "Failed":
-                        message = f"Job {job_name} Failed"
-                        job_statuses[job_name] = {"status": "Failed", "message": message}
-                        
-                        # Use the passed event loop
-                        if job_name in active_connections:
-                            asyncio.run_coroutine_threadsafe(
-                                notify_websocket(job_name, message), 
-                                loop
-                            )
+                    status = conditions[0].type
+                    update_job_statuses(job_name, JobStatus(
+                        job_name=job_name,
+                        status=status,
+                        message=f"Job {job_name} {status}",
+                    ), loop)
+                    if status in AUTHORIZED_STATUSES:
                         # Probably should delete the job here
                         delete_k8s_job(job_name, namespace)
                         w.stop()
                         break
     except Exception as e:
-        logger.error(f"Error watching job {job_name}: {str(e)}")
-        # Attempt to notify about error
-        job_statuses[job_name] = {"status": "Error", "message": f"Error watching job: {str(e)}"}
-        if job_name in active_connections and loop and loop.is_running():
-            asyncio.run_coroutine_threadsafe(
-                notify_websocket(job_name, f"Error: {str(e)}"),
-                loop
-            )
+        update_job_statuses(job_name, JobStatus(
+                        job_name=job_name,
+                        status="Error",
+                        message=f"Error watching job: {str(e)}",
+                    ), loop)
     finally:
         # Clean up the watch control entry
         if job_name in watch_control:
             del watch_control[job_name]
 
 
-async def notify_websocket(job_name: str, message: str) -> None:
+async def notify_websocket(job_status: JobStatus) -> None:
     """
     Send a message to WebSocket client.
     
     Args:
-        job_name: The job name associated with the WebSocket
-        message: Message to send to the client
+        job_status: Status information for the job including job_name
     """
     try:
+        job_name = job_status.job_name
+        if not job_name:
+            logger.error("Job name is missing in job status")
+            return
+            
+        message = job_status.message
         if job_name in active_connections:
             connection = active_connections[job_name]
             # Send as structured JSON instead of plain text
-            await connection.send_json({
-                "job_name": job_name,
-                "status": job_statuses.get(job_name, {}).get("status", "Unknown"),
-                "message": message
-            })
+            await connection.send_json(job_status.dict(exclude_unset=True))
             logger.info(f"WebSocket notification sent for job {job_name}: {message}")
             
-            # Don't automatically close the connection - let the client decide
             # Only close if job is Complete or Failed
-            job_status = job_statuses.get(job_name, {}).get("status")
-            if job_status in ["Complete", "Failed", "Error"]:
+            if job_status.status in AUTHORIZED_STATUSES:
                 await connection.close()
                 logger.info(f"Closed WebSocket for completed job {job_name}")
                 # Clean up the connection reference
                 if job_name in active_connections:
                     del active_connections[job_name]
     except Exception as e:
-        logger.error(f"Error notifying WebSocket for job {job_name}: {str(e)}")
-        # Only cleanup if there was an error
-        if job_name in active_connections:
-            del active_connections[job_name]
-
+        # More robust error handling
+        try:
+            job_name_str = job_status.job_name if hasattr(job_status, 'job_name') else "unknown"
+            logger.error(f"Error notifying WebSocket for job {job_name_str}: {str(e)}")
+            
+            # Only cleanup if there was an error and we know the job name
+            if job_name_str and job_name_str != "unknown" and job_name_str in active_connections:
+                del active_connections[job_name_str]
+        except Exception as nested_e:
+            logger.error(f"Critical error in notify_websocket error handler: {str(nested_e)}")
 
 def start_watching_job(job_name: str, namespace: str = "default") -> None:
     """
@@ -165,13 +193,9 @@ def start_watching_job(job_name: str, namespace: str = "default") -> None:
     if job_name in watch_control:
         watch_control[job_name] = False
     
-    # Initialize job status
-    job_statuses[job_name] = {"status": "Running", "message": f"Job {job_name} started"}
-    
+    # Capture the current event loop to pass to the thread
+    loop = asyncio.get_event_loop()
     try:
-        # Capture the current event loop to pass to the thread
-        loop = asyncio.get_event_loop()
-        
         # Start new watch thread
         thread = threading.Thread(
             target=watch_job_status_thread,
@@ -181,11 +205,11 @@ def start_watching_job(job_name: str, namespace: str = "default") -> None:
         thread.start()
         logger.info(f"Started job watcher thread for job {job_name}")
     except RuntimeError as e:
-        logger.error(f"Could not start job watcher: {str(e)}")
-        job_statuses[job_name] = {
-            "status": "Error", 
-            "message": f"Failed to start job watcher: {str(e)}"
-        }
+        update_job_statuses(job_name, JobStatus(
+                        job_name=job_name,
+                        status="Error",
+                        message=f"Failed to start job watcher: {str(e)}",
+                    ), loop)
 
 
 def register_websocket(job_name: str, websocket) -> None:
@@ -201,8 +225,7 @@ def register_websocket(job_name: str, websocket) -> None:
     
     # If we already have status for this job, send it immediately
     if job_name in job_statuses:
-        status = job_statuses[job_name]
-        asyncio.create_task(notify_websocket(job_name, status["message"]))
+        asyncio.create_task(notify_websocket(job_statuses[job_name]))
 
 
 def delete_k8s_job(job_name: str, namespace: str) -> bool:
@@ -247,12 +270,31 @@ def create_k8s_job(job_name: str) -> None:
         batch_v1 = client.BatchV1Api()
         core_v1 = client.CoreV1Api()
 
+        # Define volume and volume mounts for PVC
+        volumes = [
+            client.V1Volume(
+                name="data-output-volume",
+                persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(
+                    claim_name=settings["PVC_OUTPUT_NAME"]
+                ),
+            ),
+        ]
+        volume_mounts = [
+            client.V1VolumeMount(
+                name="data-output-volume", mount_path=settings["OUTPUT_PATH"]
+            ),
+        ]
+
         # Define job container with simple echo command
         container = client.V1Container(
             name="hello-world",
             image="busybox",
-            command=["sh", "-c", "echo 'Hello, Kubernetes!' || exit 1"],
+            command=["sh", "-c", "echo 'Hello, Kubernetes!' > /output/unique_filename.txt || exit 1"],
+
+            volume_mounts=volume_mounts,
         )
+
+
 
         # Define job
         job = client.V1Job(
@@ -264,7 +306,7 @@ def create_k8s_job(job_name: str) -> None:
             spec=client.V1JobSpec(
                 template=client.V1PodTemplateSpec(
                     spec=client.V1PodSpec(
-                        containers=[container], restart_policy="Never"
+                        containers=[container], volumes=volumes,restart_policy="Never"
                     )
                 ),
                 backoff_limit=0,  # No retries
@@ -274,6 +316,14 @@ def create_k8s_job(job_name: str) -> None:
 
         # Create the job
         batch_v1.create_namespaced_job(namespace=settings["NAMESPACE"], body=job)
+        update_job_statuses(job_name, JobStatus(
+            job_name=job_name,
+            status="Created",
+            message="Job is running",
+            output_path="/output/unique_filename.txt",
+            args=["echo 'Hello, Kubernetes!' > /output/unique_filename.txt || exit 1"]
+        ), asyncio.get_event_loop())
+        logger.info(f"Created job {job_name}")
         return job_name
     except Exception as e:
         error_msg = f"Failed to create or run job {job_name}: {str(e)}"
