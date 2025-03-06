@@ -51,7 +51,7 @@ class PointCloudRequest(BaseModel):
     def validate_format(cls, v: Optional[str]) -> Optional[str]:
         if not v:
             return v
-        valid_formats = ["pcd-ascii", "lasv14"]  # Add more valid formats
+        valid_formats = ["pcd-ascii", "lasv14","pcd-bin", "lasv13", "lasv12" ]  # Add more valid formats
         if v not in valid_formats:
             raise ValueError(f"Invalid format. Must be one of: {valid_formats}")
         return v
