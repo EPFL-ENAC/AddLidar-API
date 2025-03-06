@@ -297,6 +297,30 @@ def delete_k8s_job(job_name: str, namespace: str) -> bool:
         return False
 
 
+def get_log_job_status(job_name: str) -> Tuple[str, int]:
+    # Get the pod associated with the job
+    label_selector = f"job-name={job_name}"
+    core_v1 = client.CoreV1Api()
+    pods = core_v1.list_namespaced_pod(
+        namespace=settings["NAMESPACE"], label_selector=label_selector
+    )
+
+    if not pods.items:
+        logger.error(f"No pods found for job {job_name}")
+        return b"No pods found for this job", 1, None
+
+    pod_name = pods.items[0].metadata.name
+
+    # Get the logs
+    logs = core_v1.read_namespaced_pod_log(
+        name=pod_name, namespace=settings["NAMESPACE"]
+    )
+
+    # Convert logs to bytes
+    logs_bytes = logs.encode("utf-8")
+    return logs_bytes, 0
+
+
 def generate_k8s_addlidarmanager_job(
     job_name: str, unique_filename: str, cli_args: Optional[List[str]]
 ) -> None:

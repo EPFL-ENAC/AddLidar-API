@@ -18,9 +18,9 @@ class PointCloudRequest(BaseModel):
         None, description="Output format (pcd-ascii, lasv14, etc.)"
     )
     line: Optional[int] = Field(None, description="Export a specific line index", ge=0)
-    returns: Optional[int] = Field(None, description="Max return index", ge=0)
+    returns: Optional[int] = Field(None, description="Max return index", ge=-1)
     number: Optional[int] = Field(
-        None, description="Max number of points in output", gt=0
+        None, description="Max number of points in output", ge=-1
     )
     density: Optional[float] = Field(
         None, description="Max density (points per m²)", gt=0.0
@@ -51,7 +51,13 @@ class PointCloudRequest(BaseModel):
     def validate_format(cls, v: Optional[str]) -> Optional[str]:
         if not v:
             return v
-        valid_formats = ["pcd-ascii", "lasv14","pcd-bin", "lasv13", "lasv12" ]  # Add more valid formats
+        valid_formats = [
+            "pcd-ascii",
+            "lasv14",
+            "pcd-bin",
+            "lasv13",
+            "lasv12",
+        ]  # Add more valid formats
         if v not in valid_formats:
             raise ValueError(f"Invalid format. Must be one of: {valid_formats}")
         return v
