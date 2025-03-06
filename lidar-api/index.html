@@ -4,13 +4,175 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AddLidar API</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .form-container {
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 10px;
+        }
+        label {
+            display: inline-block;
+            width: 180px;
+            font-weight: bold;
+        }
+        input, select {
+            width: 300px;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .collapsible {
+            background-color: #f1f1f1;
+            cursor: pointer;
+            padding: 10px;
+            width: 100%;
+            text-align: left;
+            border: none;
+            outline: none;
+        }
+        .active, .collapsible:hover {
+            background-color: #ddd;
+        }
+        .content {
+            display: none;
+            padding: 10px;
+            overflow: hidden;
+            background-color: #f9f9f9;
+        }
+        .checkbox-label {
+            display: inline;
+            width: auto;
+            margin-right: 10px;
+        }
+        #status, #status_get {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f8f8f8;
+            border-left: 4px solid #4CAF50;
+        }
+        #download-link {
+            display: inline-block;
+            margin-top: 10px;
+            padding: 10px 15px;
+            background-color: #2196F3;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+        }
+    </style>
 </head>
 <body>
     <h1>Welcome to AddLidar API</h1>
     <h2>Kubernetes Job Manager</h2>
     
+    <button class="collapsible">Job Configuration</button>
+    <div class="content">
+        <div class="form-container">
+            <form id="job-form">
+                <div class="form-group">
+                    <label for="file_path">File Path (required):</label>
+                    <input type="text" id="file_path" value="/LiDAR/0001_Mission_Root/02_LAS_PCD/all_grouped_high_veg_10th_point.las" required>
+                    <span class="help">Path to the input point cloud file (inside mounted volume)</span>
+                </div>
+                
+                <div class="form-group">
+                    <label for="format">Output Format:</label>
+                    <select id="format">
+                        <option value="pcd-ascii" selected>pcd-ascii</option>
+                        <option value="pcd-bin">pcd-bin</option>
+                        <option value="lasv14">lasv14</option>
+                        <option value="lasv13">lasv13</option>
+                        <option value="lasv12">lasv12</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="outcrs">Output CRS:</label>
+                    <input type="text" id="outcrs" value="EPSG:4326">
+                    <span class="help">e.g., EPSG:4326</span>
+                </div>
+                
+                <div class="form-group">
+                    <label for="incrs">Input CRS Override:</label>
+                    <input type="text" id="incrs" placeholder="e.g., EPSG:2056">
+                    <span class="help">Override input CRS</span>
+                </div>
+                
+                <div class="form-group">
+                    <label for="line">Line Index:</label>
+                    <input type="number" id="line" value="1">
+                    <span class="help">The index of the line to export (-1 for no limit)</span>
+                </div>
+                
+                <div class="form-group">
+                    <label for="returns">Max Return Index:</label>
+                    <input type="number" id="returns" value="-1">
+                    <span class="help">The maximal return index to use (-1 for no limit)</span>
+                </div>
+                
+                <div class="form-group">
+                    <label for="number">Max Points:</label>
+                    <input type="number" id="number" value="-1">
+                    <span class="help">The maximal number of points (-1 for no limit)</span>
+                </div>
+                
+                <div class="form-group">
+                    <label for="density">Max Density:</label>
+                    <input type="number" id="density" step="0.01">
+                    <span class="help">The maximal density (points per m²)</span>
+                </div>
+                
+                <div class="form-group">
+                    <label for="roi">Region of Interest:</label>
+                    <input type="text" id="roi" placeholder="x0,y0,z0,dx,dy,dz,rx,ry,rz">
+                    <span class="help">Format: x0,y0,z0,dx,dy,dz,rx,ry,rz</span>
+                </div>
+                
+                <div class="form-group">
+                    <label for="remove_attribute">Remove Attribute:</label>
+                    <input type="text" id="remove_attribute" placeholder="Comma-separated attribute names">
+                    <span class="help">Comma-separated list of attributes to remove</span>
+                </div>
+                
+                <div class="form-group">
+                    <input type="checkbox" id="remove_all_attributes">
+                    <label for="remove_all_attributes" class="checkbox-label">Remove All Attributes</label>
+                    <span class="help">Remove all non-geometry attributes</span>
+                </div>
+                
+                <div class="form-group">
+                    <input type="checkbox" id="remove_color">
+                    <label for="remove_color" class="checkbox-label">Remove Color</label>
+                    <span class="help">Remove color data</span>
+                </div>
+            </form>
+        </div>
+    </div>
+    
     <button id="start-job">Start Job</button>
-    <button id="status-job">get Job status</button>
+    <button id="status-job">Get Job Status</button>
     <p id="status"></p>
     <p id="status_get"></p>
     <a id="download-link" style="display:none;" href="#" download>Download File</a>
@@ -19,10 +181,30 @@
         // Use consistent hostname across HTTP and WebSocket requests
         const API_BASE_URL = `${window.location.protocol}//${window.location.hostname}:${window.location.port}`;
         const WS_BASE_URL = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.hostname}:${window.location.port}`;
-        const PREFIX = window.location.hostname === 'localhost' ? '' : '/api';
+        const PREFIX = ['localhost', '0.0.0.0', '127.0.0.1', '::1'].includes(window.location.hostname) ? '' : '/api';
         let currentJob = null;
+
+        // Collapsible functionality
+        const coll = document.getElementsByClassName("collapsible");
+        for (let i = 0; i < coll.length; i++) {
+            coll[i].addEventListener("click", function() {
+                this.classList.toggle("active");
+                const content = this.nextElementSibling;
+                if (content.style.display === "block") {
+                    content.style.display = "none";
+                } else {
+                    content.style.display = "block";
+                }
+            });
+        }
+
         document.getElementById("status-job").addEventListener("click", async () => {
             try {
+                if (!currentJob || !currentJob.job_name) {
+                    document.getElementById("status_get").innerText = "No active job to check status for";
+                    return;
+                }
+                
                 const response = await fetch(`${API_BASE_URL}${PREFIX}/job-status/${currentJob.job_name}`, { 
                     method: "GET",
                     headers: {
@@ -36,26 +218,80 @@
                 
                 const data = await response.json();
                 console.log(data);
-                document.getElementById("status_get").innerText = `Job started: ${JSON.stringify(data)}; Time: ${new Date().toLocaleString()}`;
+                document.getElementById("status_get").innerText = `Job status: ${JSON.stringify(data)}; Time: ${new Date().toLocaleString()}`;
                 
             } catch (error) {
                 document.getElementById("status_get").innerText = `Error: ${error.message}`;
-                console.error("Error starting job:", error);
+                console.error("Error getting job status:", error);
             }
         });
+
         document.getElementById("start-job").addEventListener("click", async () => {
             try {
+                // Clear previous status
+                document.getElementById("status").innerText = "Starting job...";
+                document.getElementById("download-link").style.display = "none";
+                
+                // Get values from form
+                const filePath = document.getElementById("file_path").value.trim();
+                if (!filePath) {
+                    throw new Error("File path is required");
+                }
+                
+                // Build request body object with all parameters
+                const requestBody = {
+                    file_path: filePath,
+                    format: document.getElementById("format").value,
+                    outcrs: document.getElementById("outcrs").value,
+                };
+                
+                // Add optional parameters only if they have values
+                const incrs = document.getElementById("incrs").value.trim();
+                if (incrs) requestBody.incrs = incrs;
+                
+                const line = parseInt(document.getElementById("line").value);
+                if (!isNaN(line)) requestBody.line = line;
+                
+                const returns = parseInt(document.getElementById("returns").value);
+                if (!isNaN(returns)) requestBody.returns = returns;
+                
+                const number = parseInt(document.getElementById("number").value);
+                if (!isNaN(number)) requestBody.number = number;
+                
+                const density = parseFloat(document.getElementById("density").value);
+                if (!isNaN(density)) requestBody.density = density;
+                
+                const roi = document.getElementById("roi").value.trim();
+                if (roi) requestBody.roi = roi;
+                
+                // Handle remove_attribute (support for multiple attributes as comma-separated list)
+                const removeAttr = document.getElementById("remove_attribute").value.trim();
+                if (removeAttr) {
+                    const attrs = removeAttr.split(',').map(attr => attr.trim()).filter(attr => attr);
+                    if (attrs.length === 1) {
+                        requestBody.remove_attribute = attrs[0];
+                    } else if (attrs.length > 1) {
+                        requestBody.remove_attribute = attrs;
+                    }
+                }
+                
+                // Add checkbox values
+                if (document.getElementById("remove_all_attributes").checked) {
+                    requestBody.remove_all_attributes = true;
+                }
+                
+                if (document.getElementById("remove_color").checked) {
+                    requestBody.remove_color = true;
+                }
+                
+                console.log("Sending request with body:", requestBody);
+                
                 const response = await fetch(`${API_BASE_URL}${PREFIX}/start-job/`, { 
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json"
                     },
-                    body: JSON.stringify({
-                        file_path: "/LiDAR/0001_Mission_Root/02_LAS_PCD/all_grouped_high_veg_10th_point.las",
-                        outcrs: "EPSG:4326",
-                        line: 1,
-                        format: "pcd-ascii",
-                    })
+                    body: JSON.stringify(requestBody)
                 });
                 
                 if (!response.ok) {
