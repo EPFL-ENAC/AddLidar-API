@@ -4,7 +4,6 @@ This project is a FastAPI application that wraps the LidarDataManager CLI, allow
 
 ## Project Structure
 
-
 ```
 lidar-api
 ├── src 
@@ -15,12 +14,8 @@ lidar-api
 │ │ ├── routes.py # API endpoints definition 
 │ │ └── models.py # Data models for request and response 
 │ ├── services 
-│ │ └── docker_service.py # Logic for interacting with Docker 
-│ └── utils 
-│ └── file_utils.py # Utility functions for file handling 
-├── kubernetes 
-│ ├── deployment.yaml # Kubernetes deployment configuration 
-│ └── service.yaml # Kubernetes service configuration 
+│ │ └── k8s_addlidarmanager.py # Logic for creating k8s jobs
+| | └── parse_docker_error.py # Logic to properly get logs
 ├── Dockerfile # Instructions to build the Docker image 
 ├── requirements.txt # Python dependencies 
 ├── docker-compose.yml # Docker Compose configurations 
@@ -36,27 +31,30 @@ lidar-api
 - UV package manager
 - Docker and Docker Compose
 - Redis (for Persistence)
+- Kubernetes locally (docker-desktop or minikube) or remote
 
 ## Environment Variables
 
-The application uses the following environment variables (defined in `settings.py`):
+The application uses the following environment variables, which are defined in `settings.py`:
 
 | Variable            | Default Value                       | Description                               |
 |---------------------|-------------------------------------|-------------------------------------------|
-| ENVIRONMENT         | development                         | Deployment environment                     |
-| IMAGE_NAME          | ghcr.io/epfl-enac/lidardatamanager  | Docker image for LiDAR processing          |
-| IMAGE_TAG           | latest                              | Docker image tag                           |
-| ROOT_VOLUME         |                                     | Root volume path (based on PVC)            |
-| NAMESPACE           | epfl-cryos-addlidar-potree-dev      | Kubernetes namespace                       |
-| MOUNT_PATH          | /data                               | Container path for data mounting           |
-| OUTPUT_PATH         | /output                             | Container path for output data             |
-| PVC_OUTPUT_NAME     | lidar-data-output-pvc               | Output PVC name                            |
-| PVC_NAME            | lidar-data-pvc                      | Input data PVC name                        |
-| JOB_TIMEOUT         | 300                                 | Job timeout in seconds                     |
-| DEFAULT_DATA_ROOT   | /data                               | Default root path for input data           |
-| DEFAULT_OUTPUT_ROOT | /output                             | Default root path for output data          |
+| `ENVIRONMENT`       | `development`                       | Deployment environment                    |
+| `IMAGE_NAME`        | `ghcr.io/epfl-enac/lidardatamanager`| Docker image for LiDAR processing         |
+| `IMAGE_TAG`         | `latest`                            | Docker image tag                          |
+| `NAMESPACE`         | `epfl-cryos-addlidar-potree-dev`    | Kubernetes namespace                      |
+| `MOUNT_PATH`        | `/data`                             | Container path for data mounting          |
+| `OUTPUT_PATH`       | `/output`                           | Container path for output data            |
+| `PVC_OUTPUT_NAME`   | `lidar-data-output-pvc`             | Output PVC name                           |
+| `PVC_NAME`          | `lidar-data-pvc`                    | Input data PVC name                       |
+| `JOB_TIMEOUT`       | `300`                               | Job timeout in seconds                    |
+| `DEFAULT_OUTPUT_ROOT`| `/output`                          | Local filesystem path for output data. **Important**: This path is used when the API runs file cleanup operations. When running locally, the API will attempt to delete files from this path. In Kubernetes, this should match the mounted volume path. |
 
-You can override these settings by creating a `.env` file in the project root.
+To override these settings, create a `.env` file in the project root directory by copying `.env.example`:
+
+```bash
+cp .env.example .env
+```
 
 ## Setup Instructions
 
@@ -102,8 +100,16 @@ You can override these settings by creating a `.env` file in the project root.
    make scout
    ```
 
+## DOC
 
-## Usage
+- To run the api documentation locally you can do 
+
+`make run`
+
+and go to `http://localhost:8000/docs` or `http://localhost:8000/redoc`
+
+
+## Basic Usage
 
 ### Endpoint
 
