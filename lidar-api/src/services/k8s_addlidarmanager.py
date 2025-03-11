@@ -382,12 +382,12 @@ def generate_k8s_addlidarmanager_job(
         volume_mounts=volume_mounts,
         resources=client.V1ResourceRequirements(
             requests={
-                "cpu": "1000m",     # Request 0.1 CPU cores
-                "memory": "128Mi"  # Request 256 MiB memory
+                "cpu": "1000m",     # Request 1 CPU cores
+                "memory": "128Mi"  # Request 128 MiB memory
             },
             limits={
-                "cpu": "2000m",
-                "memory": "256Mi"
+                "cpu": "2000m",  # limits 2 CPU cores max
+                "memory": "256Mi" # limits 256 MiB memory
             }
         )
     )
