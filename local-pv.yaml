@@ -7,11 +7,11 @@ spec:
     storage: 10Gi
   volumeMode: Filesystem
   accessModes:
-    - ReadWriteOnce
+    - ReadOnlyMany
   persistentVolumeReclaimPolicy: Retain
   storageClassName: local-storage
   hostPath:
-    path: /Users/pierreguilbert/Works/git/github/EPFL-ENAC/AddLidar-API/lidar-api/data
+    path: /Volumes/fts-addlidar
     type: DirectoryOrCreate
 ---
 apiVersion: v1
@@ -21,7 +21,7 @@ metadata:
 spec:
   storageClassName: local-storage
   accessModes:
-    - ReadWriteOnce
+    - ReadOnlyMany
   resources:
     requests:
       storage: 10Gi
@@ -35,7 +35,7 @@ spec:
     storage: 10Gi
   volumeMode: Filesystem
   accessModes:
-    - ReadWriteOnce
+    - ReadWriteMany
   persistentVolumeReclaimPolicy: Retain
   storageClassName: local-output-storage
   hostPath:
@@ -49,7 +49,7 @@ metadata:
 spec:
   storageClassName: local-output-storage
   accessModes:
-    - ReadWriteOnce
+    - ReadWriteMany
   resources:
     requests:
       storage: 10Gi

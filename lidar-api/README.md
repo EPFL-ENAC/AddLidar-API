@@ -32,6 +32,9 @@ lidar-api
 - Docker and Docker Compose
 - Redis (for Persistence)
 - Kubernetes locally (docker-desktop or minikube) or remote
+    - MANDATORY for local development; at the root of the project
+      - edit local-pv.yaml to reflect your current path data and output
+      - run at the root of the project kubectl apply -f local-pv.yaml  
 
 ## Environment Variables
 

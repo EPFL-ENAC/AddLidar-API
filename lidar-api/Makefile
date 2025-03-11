@@ -7,7 +7,7 @@ sync:
 	uv sync
 
 run:
-	uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8000 --log-level debug --access-log --use-colors
+	uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8000 --log-level info --access-log --use-colors
 
 run-worker:
 	REDIS_HOST=localhost uv run celery -A src.celery_worker worker --loglevel=info
