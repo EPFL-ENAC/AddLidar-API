@@ -391,7 +391,15 @@ def generate_k8s_addlidarmanager_job(
             }
         )
     )
-
+    # Create annotations based on environment
+    annotations = {}
+    environment = settings.get("ENVIRONMENT", "development")
+    
+    if environment == "production":
+        annotations["argocd.argoproj.io/instance"] = "addlidar-api-prod"
+    else:  # development or any other environment
+        annotations["argocd.argoproj.io/instance"] = "addlidar-api-dev"
+    
     # Define job
     job = client.V1Job(
         api_version="batch/v1",
