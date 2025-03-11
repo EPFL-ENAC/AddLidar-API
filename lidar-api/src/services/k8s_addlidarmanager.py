@@ -380,6 +380,16 @@ def generate_k8s_addlidarmanager_job(
         image=container_image,
         args=full_cli_args,
         volume_mounts=volume_mounts,
+        resources=client.V1ResourceRequirements(
+            requests={
+                "cpu": "100m",     # Request 0.1 CPU cores
+                "memory": "256Mi"  # Request 256 MiB memory
+            },
+            limits={
+                "cpu": "200m",     # Limit to 0.5 CPU cores
+                "memory": "512Mi"    # Limit to 1 GiB memory
+            }
+        )
     )
 
     # Define job
@@ -434,6 +444,16 @@ def generate_k8s_hello_world(job_name: str, unique_filename: str) -> None:
             f"echo 'Hello, Kubernetes!' > /output/{unique_filename} || exit 1",
         ],
         volume_mounts=volume_mounts,
+        resources=client.V1ResourceRequirements(
+            requests={
+                "cpu": "100m",     # Request 0.1 CPU cores
+                "memory": "256Mi"  # Request 256 MiB memory
+            },
+            limits={
+                "cpu": "200m",     # Limit to 0.5 CPU cores
+                "memory": "512Mi"    # Limit to 1 GiB memory
+            }
+        )
     )
 
     # Define job
