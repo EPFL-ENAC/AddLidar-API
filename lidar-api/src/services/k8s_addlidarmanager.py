@@ -31,7 +31,7 @@ active_connections: Dict[str, Any] = {}
 # Dictionary to control running watch loops
 watch_control: Dict[str, bool] = {}
 
-AUTHORIZED_STATUSES = ["Complete", "SuccessCriteriaMet", "Failed"]
+AUTHORIZED_STATUSES = ["Complete", "SuccessCriteriaMet", "Failed", "FailureTarget"]
 
 
 class JobStatus(BaseModel):
@@ -45,6 +45,7 @@ class JobStatus(BaseModel):
     timestamp: Optional[datetime] = None
     cli_args: Optional[List[str]] = None
     output_path: Optional[str] = None
+    logs: Optional[str] = None  # Changed from bytes to str
 
     class Config:
         json_encoders = {
@@ -103,10 +104,12 @@ def get_settings() -> Dict[str, Any]:
 
 def get_log_job_status(job_name: str) -> str:
     # Get the pod associated with the job
+    settings_dict = get_settings()
+
     label_selector = f"job-name={job_name}"
     core_v1 = client.CoreV1Api()
     pods = core_v1.list_namespaced_pod(
-        namespace=settings["NAMESPACE"], label_selector=label_selector
+        namespace=settings_dict["NAMESPACE"], label_selector=label_selector
     )
 
     if not pods.items:
@@ -114,16 +117,34 @@ def get_log_job_status(job_name: str) -> str:
         return b"No pods found for this job", 1, None
 
     pod_name = pods.items[0].metadata.name
+    logger.info(f"Pod name: {pod_name}")
+    
+    try:
+        # Get the logs
+        logs = core_v1.read_namespaced_pod_log(
+            name=pod_name, namespace=settings_dict["NAMESPACE"]
+        )
 
-    # Get the logs
-    logs = core_v1.read_namespaced_pod_log(
-        name=pod_name, namespace=settings["NAMESPACE"]
-    )
-
-    # Convert logs to bytes
-    logs_bytes = logs.encode("utf-8")
-
-    return logs_bytes
+        if not logs or logs == "\n":
+            # If logs are empty, try to get pod status information
+            pod = core_v1.read_namespaced_pod(
+                name=pod_name, namespace=settings_dict["NAMESPACE"]
+            )
+            # Convert pod object to a readable string representation
+            pod_info = f"Pod phase: {pod.status.phase}\n"
+            if pod.status.container_statuses:
+                for container in pod.status.container_statuses:
+                    pod_info += f"Container {container.name} ready: {container.ready}\n"
+                    if container.state.waiting:
+                        pod_info += f"  Waiting: {container.state.waiting.reason} - {container.state.waiting.message}\n"
+                    if container.state.terminated:
+                        pod_info += f"  Terminated: {container.state.terminated.reason} - Exit code: {container.state.terminated.exit_code}\n"
+            return pod_info
+        else:
+            return logs
+    except Exception as e:
+        logger.error(f"Error getting logs for job {job_name}: {str(e)}")
+        return f"Error retrieving logs: {str(e)}"
 
 
 def watch_job_status_thread(
@@ -173,32 +194,31 @@ def watch_job_status_thread(
                     )
                 if conditions:
                     status = conditions[0].type
+                    logs = None
+                    if status in AUTHORIZED_STATUSES:
+                        try:
+                            logs = get_log_job_status(job_name)
+                        except Exception as log_error:
+                            logger.error(f"Error getting logs for job {job_name}: {str(log_error)}")
+                            logs = f"Error retrieving logs: {str(log_error)}"
+                    
                     update_job_statuses(
                         job_name,
                         JobStatus(
                             job_name=job_name,
                             status=status,
                             message=f"Job {job_name} {status}",
+                            logs=logs if logs else "no logs",
                         ),
                         loop,
                     )
                     if status in AUTHORIZED_STATUSES:
-                        # Probably should delete the job here
                         # delete_k8s_job(job_name, namespace)
-                        logs = get_log_job_status(job_name)
-                        update_job_statuses(
-                            job_name,
-                            JobStatus(
-                                job_name=job_name,
-                                status=status,
-                                message=logs,
-                            ),
-                            loop,
-                        )
                         w.stop()
                         break
 
     except Exception as e:
+        logger.error(f"Error watching job {job_name}: {str(e)}")
         update_job_statuses(
             job_name,
             JobStatus(
@@ -256,6 +276,11 @@ async def notify_websocket(job_status: Dict[str, Any] | JobStatus) -> None:
                 status_dict["created_at"], datetime
             ):
                 status_dict["created_at"] = status_dict["created_at"].isoformat()
+
+            # Ensure logs are properly serialized if present
+            if "logs" in status_dict:
+                if isinstance(status_dict["logs"], bytes):
+                    status_dict["logs"] = status_dict["logs"].decode("utf-8", errors="replace")
 
             timestamp = datetime.fromisoformat(status_dict["timestamp"])
             created_at = datetime.fromisoformat(status_dict["created_at"])
@@ -382,15 +407,15 @@ def generate_k8s_addlidarmanager_job(
     Returns:
         str: The name of the created job
     """
-    settings = get_settings()
-    container_output_path = f"{settings['OUTPUT_PATH']}/{unique_filename}"
+    settings_dict = get_settings()
+    container_output_path = f"{settings_dict['OUTPUT_PATH']}/{unique_filename}"
 
     # Add the output file argument to CLI args
     output_args = [f"-o={container_output_path}"]
     full_cli_args = cli_args + output_args
 
     # The container image to use
-    container_image = f"{settings['IMAGE_NAME']}:{settings['IMAGE_TAG']}"
+    container_image = f"{settings_dict['IMAGE_NAME']}:{settings_dict['IMAGE_TAG']}"
 
     logger.info(f"Creating job {job_name} with command: {full_cli_args}")
     logger.info(f"Using container image: {container_image}")
@@ -403,24 +428,24 @@ def generate_k8s_addlidarmanager_job(
         client.V1Volume(
             name="data-volume",
             persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(
-                claim_name=settings["PVC_NAME"]
+                claim_name=settings_dict["PVC_NAME"]
             ),
         ),
         client.V1Volume(
             name="data-output-volume",
             persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(
-                claim_name=settings["PVC_OUTPUT_NAME"]
+                claim_name=settings_dict["PVC_OUTPUT_NAME"]
             ),
         ),
     ]
     volume_mounts = [
-        client.V1VolumeMount(name="data-volume", mount_path=settings["MOUNT_PATH"]),
+        client.V1VolumeMount(name="data-volume", mount_path=settings_dict["MOUNT_PATH"]),
         client.V1VolumeMount(
-            name="data-output-volume", mount_path=settings["OUTPUT_PATH"]
+            name="data-output-volume", mount_path=settings_dict["OUTPUT_PATH"]
         ),
     ]
-    logger.info(f"Using PVC: {settings['PVC_NAME']}")
-    logger.info(f"Using PVC OUTPOUT: {settings['PVC_OUTPUT_NAME']}")
+    logger.info(f"Using PVC: {settings_dict['PVC_NAME']}")
+    logger.info(f"Using PVC OUTPOUT: {settings_dict['PVC_OUTPUT_NAME']}")
 
     # Define job container
     container = client.V1Container(
@@ -441,7 +466,7 @@ def generate_k8s_addlidarmanager_job(
     )
     # Create labels based on environment
     labels = {}
-    environment = settings.get("ENVIRONMENT", "development")
+    environment = settings_dict["ENVIRONMENT"]
 
     if environment == "production":
         labels["argocd.argoproj.io/instance"] = "addlidar-api-prod"
@@ -453,7 +478,7 @@ def generate_k8s_addlidarmanager_job(
         api_version="batch/v1",
         kind="Job",
         metadata=client.V1ObjectMeta(
-            name=job_name, namespace=settings["NAMESPACE"], labels=labels
+            name=job_name, namespace=settings_dict["NAMESPACE"], labels=labels
         ),
         spec=client.V1JobSpec(
             template=client.V1PodTemplateSpec(
@@ -467,7 +492,7 @@ def generate_k8s_addlidarmanager_job(
     )
 
     # Create the job
-    batch_v1.create_namespaced_job(namespace=settings["NAMESPACE"], body=job)
+    batch_v1.create_namespaced_job(namespace=settings_dict["NAMESPACE"], body=job)
     logger.info(f"Created job {job_name}")
     return job_name
 
@@ -475,20 +500,20 @@ def generate_k8s_addlidarmanager_job(
 def generate_k8s_hello_world(job_name: str, unique_filename: str) -> None:
     # Create API clients
     batch_v1 = client.BatchV1Api()
-    settings = get_settings()
+    settings_dict = get_settings()
 
     # Define volume and volume mounts for PVC
     volumes = [
         client.V1Volume(
             name="data-output-volume",
             persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(
-                claim_name=settings["PVC_OUTPUT_NAME"]
+                claim_name=settings_dict["PVC_OUTPUT_NAME"]
             ),
         ),
     ]
     volume_mounts = [
         client.V1VolumeMount(
-            name="data-output-volume", mount_path=settings["OUTPUT_PATH"]
+            name="data-output-volume", mount_path=settings_dict["OUTPUT_PATH"]
         ),
     ]
 
@@ -518,7 +543,7 @@ def generate_k8s_hello_world(job_name: str, unique_filename: str) -> None:
     job = client.V1Job(
         api_version="batch/v1",
         kind="Job",
-        metadata=client.V1ObjectMeta(name=job_name, namespace=settings["NAMESPACE"]),
+        metadata=client.V1ObjectMeta(name=job_name, namespace=settings_dict["NAMESPACE"]),
         spec=client.V1JobSpec(
             template=client.V1PodTemplateSpec(
                 spec=client.V1PodSpec(
@@ -531,7 +556,7 @@ def generate_k8s_hello_world(job_name: str, unique_filename: str) -> None:
     )
 
     # Create the job
-    batch_v1.create_namespaced_job(namespace=settings["NAMESPACE"], body=job)
+    batch_v1.create_namespaced_job(namespace=settings_dict["NAMESPACE"], body=job)
     return job_name
 
 
@@ -629,8 +654,8 @@ def process_point_cloud(cli_args: List[str]) -> Tuple[bytes, int, Optional[str]]
     Returns:
         Tuple of (output data, exit code, output file path or None)
     """
-    settings = get_settings()
-    logger.info(f"Using settings: {settings}")
+    settings_dict = get_settings()
+    logger.info(f"Using settings: {settings_dict}")
 
     try:
         # Generate a unique job name
@@ -642,12 +667,12 @@ def process_point_cloud(cli_args: List[str]) -> Tuple[bytes, int, Optional[str]]
         w = Watch()
 
         logger.info(
-            f"Waiting for job {job_name} to complete (timeout: {settings['JOB_TIMEOUT']}s)..."
+            f"Waiting for job {job_name} to complete (timeout: {settings_dict['JOB_TIMEOUT']}s)..."
         )
         for event in w.stream(
             batch_v1.list_namespaced_job,
-            namespace=settings["NAMESPACE"],
-            timeout_seconds=settings["JOB_TIMEOUT"],
+            namespace=settings_dict["NAMESPACE"],
+            timeout_seconds=settings_dict["JOB_TIMEOUT"],
         ):
             if event["object"].metadata.name == job_name:
                 job_obj = event["object"]
@@ -668,7 +693,7 @@ def process_point_cloud(cli_args: List[str]) -> Tuple[bytes, int, Optional[str]]
         label_selector = f"job-name={job_name}"
         core_v1 = client.CoreV1Api()
         pods = core_v1.list_namespaced_pod(
-            namespace=settings["NAMESPACE"], label_selector=label_selector
+            namespace=settings_dict["NAMESPACE"], label_selector=label_selector
         )
 
         if not pods.items:
@@ -679,14 +704,14 @@ def process_point_cloud(cli_args: List[str]) -> Tuple[bytes, int, Optional[str]]
 
         # Get the logs
         logs = core_v1.read_namespaced_pod_log(
-            name=pod_name, namespace=settings["NAMESPACE"]
+            name=pod_name, namespace=settings_dict["NAMESPACE"]
         )
 
         # Convert logs to bytes
         logs_bytes = logs.encode("utf-8")
 
         # Clean up job
-        # delete_k8s_job(job_name, settings["NAMESPACE"])
+        # delete_k8s_job(job_name, settings_dict["NAMESPACE"])
 
         # Return appropriate results based on job status
         if job_status["succeeded"]:
@@ -698,7 +723,7 @@ def process_point_cloud(cli_args: List[str]) -> Tuple[bytes, int, Optional[str]]
         error_msg = f"Kubernetes job error: {str(e)}"
         logger.error(error_msg)
         # Clean up job
-        # delete_k8s_job(job_name, settings["NAMESPACE"])
+        # delete_k8s_job(job_name, settings_dict["NAMESPACE"])
         return error_msg.encode("utf-8"), 1, None
 
 
