@@ -41,7 +41,7 @@ class JobStatus(BaseModel):
     status: Optional[str]
     message: Optional[str]
     created_at: Optional[datetime] = None
-    total_time: Optional[float] = None # in seconds
+    total_time: Optional[float] = None  # in seconds
     timestamp: Optional[datetime] = None
     cli_args: Optional[List[str]] = None
     output_path: Optional[str] = None
@@ -118,7 +118,7 @@ def get_log_job_status(job_name: str) -> str:
 
     pod_name = pods.items[0].metadata.name
     logger.info(f"Pod name: {pod_name}")
-    
+
     try:
         # Get the logs
         logs = core_v1.read_namespaced_pod_log(
@@ -138,7 +138,10 @@ def get_log_job_status(job_name: str) -> str:
                     if container.state.waiting:
                         pod_info += f"  Waiting: {container.state.waiting.reason} - {container.state.waiting.message}\n"
                     if container.state.terminated:
-                        pod_info += f"  Terminated: {container.state.terminated.reason} - Exit code: {container.state.terminated.exit_code}\n"
+                        pod_info += (
+                            f"  Terminated: {container.state.terminated.reason} - "
+                            f"Exit code: {container.state.terminated.exit_code}\n"
+                        )
             return pod_info
         else:
             return logs
@@ -199,9 +202,11 @@ def watch_job_status_thread(
                         try:
                             logs = get_log_job_status(job_name)
                         except Exception as log_error:
-                            logger.error(f"Error getting logs for job {job_name}: {str(log_error)}")
+                            logger.error(
+                                f"Error getting logs for job {job_name}: {str(log_error)}"
+                            )
                             logs = f"Error retrieving logs: {str(log_error)}"
-                    
+
                     update_job_statuses(
                         job_name,
                         JobStatus(
@@ -234,7 +239,7 @@ def watch_job_status_thread(
             del watch_control[job_name]
 
 
-async def notify_websocket(job_status: Dict[str, Any] | JobStatus) -> None:
+async def notify_websocket(job_status: JobStatus) -> None:
     """
     Send a message to WebSocket client.
 
@@ -243,77 +248,65 @@ async def notify_websocket(job_status: Dict[str, Any] | JobStatus) -> None:
                     Can be either a JobStatus object or a dictionary
     """
     try:
-        # Extract job name and ensure it exists
-        if isinstance(job_status, JobStatus):
-            job_name = job_status.job_name
-            message = job_status.message
-            status = job_status.status
-            # Convert to dict for serialization
-            status_dict = job_status.dict(exclude_unset=True)
-        else:
-            # Handle dictionary input
-            job_name = job_status.get("job_name")
-            message = job_status.get("message")
-            status = job_status.get("status")
-            status_dict = job_status
-
+        job_name = extract_job_name(job_status)
         if not job_name:
             logger.error(f"Job name is missing in job status: {job_status}")
             return
 
-        # Only proceed if we have an active connection for this job
         if job_name in active_connections:
             connection = active_connections[job_name]
-
-            # Handle datetime serialization explicitly
-            if status_dict.get("timestamp") and isinstance(
-                status_dict["timestamp"], datetime
-            ):
-                status_dict["timestamp"] = status_dict["timestamp"].isoformat()
-
-            # Handle datetime serialization explicitly
-            if status_dict.get("created_at") and isinstance(
-                status_dict["created_at"], datetime
-            ):
-                status_dict["created_at"] = status_dict["created_at"].isoformat()
-
-            # Ensure logs are properly serialized if present
-            if "logs" in status_dict:
-                if isinstance(status_dict["logs"], bytes):
-                    status_dict["logs"] = status_dict["logs"].decode("utf-8", errors="replace")
-
-            timestamp = datetime.fromisoformat(status_dict["timestamp"])
-            created_at = datetime.fromisoformat(status_dict["created_at"])
-            status_dict["total_time"] = (timestamp - created_at).total_seconds()
-            # Send as structured JSON
+            status_dict = prepare_status_dict(job_status)
             await connection.send_json(status_dict)
-            logger.info(f"WebSocket notification sent for job {job_name}: {message}")
+            logger.info(
+                f"WebSocket notification sent for job {job_name}: {job_status.message}"
+            )
 
-            # Only close if job is Complete or Failed
-            if status in AUTHORIZED_STATUSES:
+            if job_status.status in AUTHORIZED_STATUSES:
                 await connection.close()
                 logger.info(f"Closed WebSocket for completed job {job_name}")
-                # Clean up the connection reference
-                if job_name in active_connections:
-                    del active_connections[job_name]
+                del active_connections[job_name]
     except Exception as e:
-        # Simplified error handling with reliable job name extraction
-        job_name_str = "unknown"
-        try:
-            if isinstance(job_status, JobStatus) and job_status.job_name:
-                job_name_str = job_status.job_name
-            elif isinstance(job_status, dict) and job_status.get("job_name"):
-                job_name_str = job_status.get("job_name")
+        handle_notification_error(e, job_status)
 
-            logger.error(f"Error notifying WebSocket for job {job_name_str}: {str(e)}")
 
-            # Only cleanup if there was an error and we know the job name
-            if job_name_str != "unknown" and job_name_str in active_connections:
-                del active_connections[job_name_str]
-        except Exception as nested_e:
-            logger.error(
-                f"Critical error in notify_websocket error handler: {str(nested_e)}"
-            )
+def extract_job_name(job_status: JobStatus) -> Optional[str]:
+    if not isinstance(job_status, JobStatus):
+        raise ValueError("job_status must be a JobStatus object")
+    return job_status.job_name
+
+
+def prepare_status_dict(job_status: JobStatus) -> Dict[str, Any]:
+    status_dict = job_status.dict(exclude_unset=True)
+    if status_dict.get("timestamp") and isinstance(status_dict["timestamp"], datetime):
+        status_dict["timestamp"] = status_dict["timestamp"].isoformat()
+    if status_dict.get("created_at") and isinstance(
+        status_dict["created_at"], datetime
+    ):
+        status_dict["created_at"] = status_dict["created_at"].isoformat()
+    if "logs" in status_dict and isinstance(status_dict["logs"], bytes):
+        status_dict["logs"] = status_dict["logs"].decode("utf-8", errors="replace")
+    if status_dict.get("timestamp") and status_dict.get("created_at"):
+        timestamp = datetime.fromisoformat(status_dict["timestamp"])
+        created_at = datetime.fromisoformat(status_dict["created_at"])
+        status_dict["total_time"] = (timestamp - created_at).total_seconds()
+    return status_dict
+
+
+def handle_notification_error(e: Exception, job_status: JobStatus) -> None:
+    job_name_str = "unknown"
+    try:
+        job_name_str = (
+            job_status.job_name
+            if isinstance(job_status, JobStatus)
+            else job_status.get("job_name", "unknown")
+        )
+        logger.error(f"Error notifying WebSocket for job {job_name_str}: {str(e)}")
+        if job_name_str in active_connections:
+            del active_connections[job_name_str]
+    except Exception as nested_e:
+        logger.error(
+            f"Critical error in notify_websocket error handler: {str(nested_e)}"
+        )
 
 
 def start_watching_job(job_name: str, namespace: str = "default") -> None:
@@ -439,7 +432,9 @@ def generate_k8s_addlidarmanager_job(
         ),
     ]
     volume_mounts = [
-        client.V1VolumeMount(name="data-volume", mount_path=settings_dict["MOUNT_PATH"]),
+        client.V1VolumeMount(
+            name="data-volume", mount_path=settings_dict["MOUNT_PATH"]
+        ),
         client.V1VolumeMount(
             name="data-output-volume", mount_path=settings_dict["OUTPUT_PATH"]
         ),
@@ -543,7 +538,9 @@ def generate_k8s_hello_world(job_name: str, unique_filename: str) -> None:
     job = client.V1Job(
         api_version="batch/v1",
         kind="Job",
-        metadata=client.V1ObjectMeta(name=job_name, namespace=settings_dict["NAMESPACE"]),
+        metadata=client.V1ObjectMeta(
+            name=job_name, namespace=settings_dict["NAMESPACE"]
+        ),
         spec=client.V1JobSpec(
             template=client.V1PodTemplateSpec(
                 spec=client.V1PodSpec(
