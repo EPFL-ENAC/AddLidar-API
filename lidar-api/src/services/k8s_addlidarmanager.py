@@ -62,10 +62,10 @@ def update_job_statuses(
     Args:
         job_name: Name of the job to update
         job_status: Status information for the job
+        loop: Event loop to schedule async tasks on
     """
     # Get current job status if it exists
     current_status = job_statuses.get(job_name, {})
-    # logger.info("current_status: ", current_status)
 
     # Convert new status to dict
     new_status = job_status.dict(exclude_unset=True, exclude_none=True)
@@ -73,18 +73,17 @@ def update_job_statuses(
     # Merge statuses, preserving existing values for fields not in new_status
     merged_status = {**current_status, **new_status}
     merged_status["timestamp"] = datetime.now()
-    # logger.info("merged_status: ", merged_status)
+    
     # Store the merged status
     job_statuses[job_name] = merged_status
 
-    # Use the passed event loop
-    # Convert back to JobStatus before passing to notify_websocket
-    status_object = JobStatus(**merged_status)
+    # Use the passed event loop to notify connected WebSocket clients
     if job_name in active_connections:
+        # Use JobStatus object directly instead of dict to avoid type issues
+        status_object = JobStatus(**merged_status)
         asyncio.run_coroutine_threadsafe(notify_websocket(status_object), loop)
 
-    # logger.debug(f"Updated job status for {job_name}: {merged_status}")
-
+    logger.debug(f"Updated job status for {job_name}: {merged_status}")
 
 def get_settings() -> Dict[str, Any]:
     """
@@ -167,27 +166,39 @@ def watch_job_status_thread(
             del watch_control[job_name]
 
 
-async def notify_websocket(job_status: JobStatus) -> None:
+async def notify_websocket(job_status: Dict[str, Any] | JobStatus) -> None:
     """
     Send a message to WebSocket client.
 
     Args:
         job_status: Status information for the job including job_name
+                    Can be either a JobStatus object or a dictionary
     """
     try:
-        job_name = job_status.job_name
+        # Extract job name and ensure it exists
+        if isinstance(job_status, JobStatus):
+            job_name = job_status.job_name
+            message = job_status.message
+            status = job_status.status
+            # Convert to dict for serialization
+            status_dict = job_status.dict(exclude_unset=True)
+        else:
+            # Handle dictionary input
+            job_name = job_status.get("job_name")
+            message = job_status.get("message")
+            status = job_status.get("status")
+            status_dict = job_status
+        
         if not job_name:
-            logger.error("Job name is missing in job status")
+            logger.error(f"Job name is missing in job status: {job_status}")
             return
 
-        message = job_status.message
+        # Only proceed if we have an active connection for this job
         if job_name in active_connections:
             connection = active_connections[job_name]
-            # Send as structured JSON instead of plain text
-            status_dict = job_status.dict(exclude_unset=True)
-
+            
             # Handle datetime serialization explicitly
-            if status_dict.get("timestamp"):
+            if status_dict.get("timestamp") and isinstance(status_dict["timestamp"], datetime):
                 status_dict["timestamp"] = status_dict["timestamp"].isoformat()
 
             # Send as structured JSON
@@ -195,32 +206,28 @@ async def notify_websocket(job_status: JobStatus) -> None:
             logger.info(f"WebSocket notification sent for job {job_name}: {message}")
 
             # Only close if job is Complete or Failed
-            if job_status.status in AUTHORIZED_STATUSES:
+            if status in AUTHORIZED_STATUSES:
                 await connection.close()
                 logger.info(f"Closed WebSocket for completed job {job_name}")
                 # Clean up the connection reference
                 if job_name in active_connections:
                     del active_connections[job_name]
     except Exception as e:
-        # More robust error handling
+        # Simplified error handling with reliable job name extraction
+        job_name_str = "unknown"
         try:
-            job_name_str = (
-                job_status.job_name if hasattr(job_status, "job_name") else "unknown"
-            )
+            if isinstance(job_status, JobStatus) and job_status.job_name:
+                job_name_str = job_status.job_name
+            elif isinstance(job_status, dict) and job_status.get("job_name"):
+                job_name_str = job_status.get("job_name")
+                
             logger.error(f"Error notifying WebSocket for job {job_name_str}: {str(e)}")
-
+            
             # Only cleanup if there was an error and we know the job name
-            if (
-                job_name_str
-                and job_name_str != "unknown"
-                and job_name_str in active_connections
-            ):
+            if job_name_str != "unknown" and job_name_str in active_connections:
                 del active_connections[job_name_str]
         except Exception as nested_e:
-            logger.error(
-                f"Critical error in notify_websocket error handler: {str(nested_e)}"
-            )
-
+            logger.error(f"Critical error in notify_websocket error handler: {str(nested_e)}")
 
 def start_watching_job(job_name: str, namespace: str = "default") -> None:
     """
@@ -270,7 +277,10 @@ def register_websocket(job_name: str, websocket) -> None:
 
     # If we already have status for this job, send it immediately
     if job_name in job_statuses:
-        asyncio.create_task(notify_websocket(job_statuses[job_name]))
+        status_dict = job_statuses[job_name]
+        # Convert to JobStatus object to ensure type safety
+        status_object = JobStatus(**status_dict)
+        asyncio.create_task(notify_websocket(status_object))
 
 
 def delete_k8s_job(job_name: str, namespace: str) -> bool:
