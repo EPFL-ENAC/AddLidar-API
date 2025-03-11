@@ -382,29 +382,31 @@ def generate_k8s_addlidarmanager_job(
         volume_mounts=volume_mounts,
         resources=client.V1ResourceRequirements(
             requests={
-                "cpu": "1000m",     # Request 1 CPU cores
-                "memory": "128Mi"  # Request 128 MiB memory
+                "cpu": "1000m",  # Request 1 CPU cores
+                "memory": "64Mi",  # Request 128 MiB memory
             },
             limits={
-                "cpu": "2000m",  # limits 2 CPU cores max
-                "memory": "256Mi" # limits 256 MiB memory
-            }
-        )
+                "cpu": "1000m",  # limits 2 CPU cores max
+                "memory": "128Mi",  # limits 256 MiB memory
+            },
+        ),
     )
-    # Create annotations based on environment
-    annotations = {}
+    # Create labels based on environment
+    labels = {}
     environment = settings.get("ENVIRONMENT", "development")
-    
+
     if environment == "production":
-        annotations["argocd.argoproj.io/instance"] = "addlidar-api-prod"
+        labels["argocd.argoproj.io/instance"] = "addlidar-api-prod"
     else:  # development or any other environment
-        annotations["argocd.argoproj.io/instance"] = "addlidar-api-dev"
-    
+        labels["argocd.argoproj.io/instance"] = "addlidar-api-dev"
+
     # Define job
     job = client.V1Job(
         api_version="batch/v1",
         kind="Job",
-        metadata=client.V1ObjectMeta(name=job_name, namespace=settings["NAMESPACE"]),
+        metadata=client.V1ObjectMeta(
+            name=job_name, namespace=settings["NAMESPACE"], labels=labels
+        ),
         spec=client.V1JobSpec(
             template=client.V1PodTemplateSpec(
                 spec=client.V1PodSpec(
@@ -454,14 +456,14 @@ def generate_k8s_hello_world(job_name: str, unique_filename: str) -> None:
         volume_mounts=volume_mounts,
         resources=client.V1ResourceRequirements(
             requests={
-                "cpu": "100m",     # Request 0.1 CPU cores
-                "memory": "256Mi"  # Request 256 MiB memory
+                "cpu": "100m",  # Request 0.1 CPU cores
+                "memory": "256Mi",  # Request 256 MiB memory
             },
             limits={
-                "cpu": "200m",     # Limit to 0.5 CPU cores
-                "memory": "512Mi"    # Limit to 1 GiB memory
-            }
-        )
+                "cpu": "200m",  # Limit to 0.5 CPU cores
+                "memory": "512Mi",  # Limit to 1 GiB memory
+            },
+        ),
     )
 
     # Define job
