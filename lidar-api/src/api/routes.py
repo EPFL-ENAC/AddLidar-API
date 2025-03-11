@@ -184,13 +184,13 @@ async def process_point_cloud_endpoint(
                 error_details={"message": "An unexpected error occurred"},
             ).model_dump(),
         )
-    finally:
-        # Remove the output file after sending the response
-        if output_file_path:
-            full_output_path = os.path.join(
-                settings.DEFAULT_OUTPUT_ROOT, output_file_path
-            )
-            background_tasks.add_task(remove_output_file, full_output_path)
+    # finally:
+    #     # Remove the output file after sending the response
+    #     if output_file_path:
+    #         full_output_path = os.path.join(
+    #             settings.DEFAULT_OUTPUT_ROOT, output_file_path
+    #         )
+    #         background_tasks.add_task(remove_output_file, full_output_path)
 
 
 @router.get("/health")
@@ -323,13 +323,13 @@ async def get_job_file(
                 "message": f"Error downloading file: {str(e)}",
             },
         )
-    finally:
-        # Remove the output file after sending the response
-        if output_file_path:
-            full_output_path = os.path.join(
-                settings.DEFAULT_OUTPUT_ROOT, output_file_path
-            )
-            background_tasks.add_task(remove_output_file, full_output_path)
+    # finally:
+    #     # Remove the output file after sending the response
+    #     if output_file_path:
+    #         full_output_path = os.path.join(
+    #             settings.DEFAULT_OUTPUT_ROOT, output_file_path
+    #         )
+    #         background_tasks.add_task(remove_output_file, full_output_path)
 
 
 @router.websocket("/ws/job-status/{job_name}")
