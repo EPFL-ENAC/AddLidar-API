@@ -40,6 +40,8 @@ class JobStatus(BaseModel):
     job_name: Optional[str]
     status: Optional[str]
     message: Optional[str]
+    created_at: Optional[datetime] = None
+    total_time: Optional[float] = None # in seconds
     timestamp: Optional[datetime] = None
     cli_args: Optional[List[str]] = None
     output_path: Optional[str] = None
@@ -97,6 +99,31 @@ def get_settings() -> Dict[str, Any]:
         Dict[str, Any]: Dictionary of configuration settings
     """
     return settings.dict()
+
+
+def get_log_job_status(job_name: str) -> str:
+    # Get the pod associated with the job
+    label_selector = f"job-name={job_name}"
+    core_v1 = client.CoreV1Api()
+    pods = core_v1.list_namespaced_pod(
+        namespace=settings["NAMESPACE"], label_selector=label_selector
+    )
+
+    if not pods.items:
+        logger.error(f"No pods found for job {job_name}")
+        return b"No pods found for this job", 1, None
+
+    pod_name = pods.items[0].metadata.name
+
+    # Get the logs
+    logs = core_v1.read_namespaced_pod_log(
+        name=pod_name, namespace=settings["NAMESPACE"]
+    )
+
+    # Convert logs to bytes
+    logs_bytes = logs.encode("utf-8")
+
+    return logs_bytes
 
 
 def watch_job_status_thread(
@@ -158,8 +185,19 @@ def watch_job_status_thread(
                     if status in AUTHORIZED_STATUSES:
                         # Probably should delete the job here
                         # delete_k8s_job(job_name, namespace)
+                        logs = get_log_job_status(job_name)
+                        update_job_statuses(
+                            job_name,
+                            JobStatus(
+                                job_name=job_name,
+                                status=status,
+                                message=logs,
+                            ),
+                            loop,
+                        )
                         w.stop()
                         break
+
     except Exception as e:
         update_job_statuses(
             job_name,
@@ -213,6 +251,15 @@ async def notify_websocket(job_status: Dict[str, Any] | JobStatus) -> None:
             ):
                 status_dict["timestamp"] = status_dict["timestamp"].isoformat()
 
+            # Handle datetime serialization explicitly
+            if status_dict.get("created_at") and isinstance(
+                status_dict["created_at"], datetime
+            ):
+                status_dict["created_at"] = status_dict["created_at"].isoformat()
+
+            timestamp = datetime.fromisoformat(status_dict["timestamp"])
+            created_at = datetime.fromisoformat(status_dict["created_at"])
+            status_dict["total_time"] = (timestamp - created_at).total_seconds()
             # Send as structured JSON
             await connection.send_json(status_dict)
             logger.info(f"WebSocket notification sent for job {job_name}: {message}")
@@ -320,30 +367,6 @@ def delete_k8s_job(job_name: str, namespace: str) -> bool:
     except Exception as e:
         logger.warning(f"Failed to delete job {job_name}: {str(e)}")
         return False
-
-
-def get_log_job_status(job_name: str) -> Tuple[str, int]:
-    # Get the pod associated with the job
-    label_selector = f"job-name={job_name}"
-    core_v1 = client.CoreV1Api()
-    pods = core_v1.list_namespaced_pod(
-        namespace=settings["NAMESPACE"], label_selector=label_selector
-    )
-
-    if not pods.items:
-        logger.error(f"No pods found for job {job_name}")
-        return b"No pods found for this job", 1, None
-
-    pod_name = pods.items[0].metadata.name
-
-    # Get the logs
-    logs = core_v1.read_namespaced_pod_log(
-        name=pod_name, namespace=settings["NAMESPACE"]
-    )
-
-    # Convert logs to bytes
-    logs_bytes = logs.encode("utf-8")
-    return logs_bytes, 0
 
 
 def generate_k8s_addlidarmanager_job(
@@ -533,6 +556,7 @@ def create_k8s_job(job_name: str, cli_args: Optional[List[str]]) -> None:
             JobStatus(
                 job_name=job_name,
                 status="Created",
+                created_at=datetime.now(),
                 message="Job is created",
                 output_path=unique_filename,
                 cli_args=cli_args,
