@@ -102,6 +102,37 @@ def get_settings() -> Dict[str, Any]:
     return settings.dict()
 
 
+def get_pod_info(pod_name: str) -> str:
+    """
+    Get information about a pod.
+
+    Args:
+        pod_name: Name of the pod to get information for
+
+    Returns:
+        str: Information about the pod
+    """
+    core_v1 = client.CoreV1Api()
+    settings_dict = get_settings()
+    pod = core_v1.read_namespaced_pod(
+        name=pod_name, namespace=settings_dict["NAMESPACE"]
+    )
+    pod_info = f"Pod phase: {pod.status.phase}\n"
+    if pod.status.container_statuses:
+        for container in pod.status.container_statuses:
+            logger.info(f"Container {container.name}: {str(container)}")
+            pod_info += f"Container {container.name} ready: {container.ready}\n"
+            if container.state.waiting:
+                pod_info += f"  Waiting: {container.state.waiting.reason} - {container.state.waiting.message}\n"
+            if container.state.terminated:
+                pod_info += (
+                    f"  Terminated: {container.state.terminated.reason} - "
+                    f"Exit code: {container.state.terminated.exit_code} - "
+                    f"Message: {container.state.terminated.message}\n"
+                )
+    return pod_info
+
+
 def get_log_job_status(job_name: str) -> str:
     # Get the pod associated with the job
     settings_dict = get_settings()
@@ -125,26 +156,15 @@ def get_log_job_status(job_name: str) -> str:
             name=pod_name, namespace=settings_dict["NAMESPACE"]
         )
 
+        # if not logs or logs == "\n":
+        #     # If logs are empty, try to get pod status information
+        #     logs = get_pod_info(pod_name)
+        # else:
+        #     return logs
         if not logs or logs == "\n":
-            # If logs are empty, try to get pod status information
-            pod = core_v1.read_namespaced_pod(
-                name=pod_name, namespace=settings_dict["NAMESPACE"]
-            )
-            # Convert pod object to a readable string representation
-            pod_info = f"Pod phase: {pod.status.phase}\n"
-            if pod.status.container_statuses:
-                for container in pod.status.container_statuses:
-                    pod_info += f"Container {container.name} ready: {container.ready}\n"
-                    if container.state.waiting:
-                        pod_info += f"  Waiting: {container.state.waiting.reason} - {container.state.waiting.message}\n"
-                    if container.state.terminated:
-                        pod_info += (
-                            f"  Terminated: {container.state.terminated.reason} - "
-                            f"Exit code: {container.state.terminated.exit_code}\n"
-                        )
-            return pod_info
-        else:
-            return logs
+            logs = "No logs available\n"
+        return logs + "\n" + get_pod_info(pod_name)
+
     except Exception as e:
         logger.error(f"Error getting logs for job {job_name}: {str(e)}")
         return f"Error retrieving logs: {str(e)}"
