@@ -66,7 +66,7 @@
             width: auto;
             margin-right: 10px;
         }
-        #status, #status_get {
+        #status, #status_get, #health_status {
             margin-top: 20px;
             padding: 10px;
             background-color: #f8f8f8;
@@ -151,6 +151,12 @@
             max-height: 200px;
             overflow-y: auto;
             white-space: pre;
+        }
+        #check-health {
+            background-color: #2196F3; /* Different color to distinguish from other buttons */
+        }
+        #check-health:hover {
+            background-color: #0b7dda;
         }
     </style>
 </head>
@@ -245,8 +251,10 @@
     <button id="start-job">Start Job</button>
     <button id="stop-job">Stop Job</button>
     <button id="status-job">Get Job Status</button>
+    <button id="check-health">Check API Health</button>
     <div id="status"></div>
     <div id="status_get"></div>
+    <div id="health_status"></div>
     <a id="download-link" style="display:none;" href="#" download>Download File</a>
 
     <script>
@@ -348,6 +356,63 @@
             return container;
         }
 
+        // Function to format health data
+        function formatHealthData(data) {
+            const container = document.createElement('div');
+            container.className = 'json-container';
+            
+            const statusClass = data.status === 'healthy' ? 'status-success' : 'status-error';
+            
+            const header = document.createElement('div');
+            header.className = `status-panel ${statusClass}`;
+            header.innerHTML = `<strong>Health Status:</strong> ${data.status}`;
+            container.appendChild(header);
+            
+            // Use the provided timestamp if available
+            const timeElement = document.createElement('div');
+            timeElement.className = 'message-time';
+            const date = data.timestamp ? new Date(data.timestamp * 1000) : new Date();
+            timeElement.textContent = `Checked: ${date.toLocaleString()}`;
+            container.appendChild(timeElement);
+            
+            // Display system metrics
+            if (data.active_connections !== undefined) {
+                const connectionsEl = document.createElement('div');
+                connectionsEl.innerHTML = `<strong>Active Connections:</strong> ${data.active_connections}`;
+                container.appendChild(connectionsEl);
+            }
+            
+            if (data.job_statuses !== undefined) {
+                const jobsEl = document.createElement('div');
+                jobsEl.innerHTML = `<strong>Tracked Jobs:</strong> ${data.job_statuses}`;
+                container.appendChild(jobsEl);
+            }
+            
+            if (data.namespace) {
+                const namespaceEl = document.createElement('div');
+                namespaceEl.innerHTML = `<strong>Namespace:</strong> ${data.namespace}`;
+                container.appendChild(namespaceEl);
+            }
+            
+            if (data.watch_connections !== undefined) {
+                const watchEl = document.createElement('div');
+                watchEl.innerHTML = `<strong>Watch Connections:</strong> ${data.watch_connections}`;
+                container.appendChild(watchEl);
+            }
+            
+            // Add all data as details
+            const detailsEl = document.createElement('div');
+            detailsEl.innerHTML = `<strong>Details:</strong>`;
+            container.appendChild(detailsEl);
+            
+            const detailsCode = document.createElement('pre');
+            detailsCode.className = 'code-block';
+            detailsCode.textContent = JSON.stringify(data, null, 2);
+            container.appendChild(detailsCode);
+            
+            return container;
+        }
+
         document.getElementById("status-job").addEventListener("click", async () => {
             try {
                 if (!currentJob || !currentJob.job_name) {
@@ -376,6 +441,41 @@
             } catch (error) {
                 document.getElementById("status_get").innerHTML = `<p>Error: ${error.message}</p>`;
                 console.error("Error getting job status:", error);
+            }
+        });
+
+        document.getElementById("check-health").addEventListener("click", async () => {
+            try {
+                // Clear previous health status
+                document.getElementById("health_status").innerHTML = "<p>Checking API health...</p>";
+                
+                // Connect to health WebSocket
+                const response =  await fetch(`${API_BASE_URL}${PREFIX}/ws/health`);
+                
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                try {
+                        // const data = JSON.parse(event.data);
+                        console.log("Received health data:", data);
+                        
+                        const healthStatus = document.getElementById('health_status');
+                        healthStatus.innerHTML = '';
+                        healthStatus.appendChild(formatHealthData(data));
+                    } catch (error) {
+                        const healthStatus = document.getElementById('health_status');
+                        const errorMsg = document.createElement('p');
+                        errorMsg.textContent = `Error parsing health data: ${error.message}`;
+                        healthStatus.appendChild(errorMsg);
+                        console.error("WebSocket health data parse error:", error);
+                    }
+                
+            } catch (error) {
+                document.getElementById("health_status").innerHTML = `<p>Error: ${error.message}</p>`;
+                console.error("Error checking health:", error);
             }
         });
 

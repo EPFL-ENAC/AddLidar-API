@@ -120,7 +120,6 @@ def get_pod_info(pod_name: str) -> str:
     pod_info = f"Pod phase: {pod.status.phase}\n"
     if pod.status.container_statuses:
         for container in pod.status.container_statuses:
-            logger.info(f"Container {container.name}: {str(container)}")
             pod_info += f"Container {container.name} ready: {container.ready}\n"
             if container.state.waiting:
                 pod_info += f"  Waiting: {container.state.waiting.reason} - {container.state.waiting.message}\n"
@@ -256,6 +255,7 @@ def watch_job_status_thread(
     finally:
         # Clean up the watch control entry
         if job_name in watch_control:
+            logger.info(f"Cleaning up watch control: {job_name}")
             del watch_control[job_name]
 
 
@@ -327,6 +327,20 @@ def handle_notification_error(e: Exception, job_status: JobStatus) -> None:
         logger.error(
             f"Critical error in notify_websocket error handler: {str(nested_e)}"
         )
+
+
+def stop_watching_job(job_name: str) -> None:
+    """
+    Stops watching a job.
+
+    Args:
+        job_name: Name of the job to stop watching
+    """
+    if job_name in watch_control:
+        watch_control[job_name] = False
+        logger.info(f"Stopping job watcher for job {job_name}")
+    else:
+        logger.warning(f"No watch control found for job {job_name}")
 
 
 def start_watching_job(job_name: str, namespace: str = "default") -> None:
