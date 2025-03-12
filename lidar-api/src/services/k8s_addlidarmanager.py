@@ -481,19 +481,22 @@ def generate_k8s_addlidarmanager_job(
     )
     # Create labels based on environment
     labels = {}
+    annotations = {}
     environment = settings_dict["ENVIRONMENT"]
 
     if environment == "production":
         labels["argocd.argoproj.io/instance"] = "addlidar-api-prod"
+        annotations["argocd.argoproj.io/instance"] = "addlidar-api-prod"
     else:  # development or any other environment
         labels["argocd.argoproj.io/instance"] = "addlidar-api-dev"
+        annotations["argocd.argoproj.io/instance"] = "addlidar-api-dev"
 
     # Define job
     job = client.V1Job(
         api_version="batch/v1",
         kind="Job",
         metadata=client.V1ObjectMeta(
-            name=job_name, namespace=settings_dict["NAMESPACE"], labels=labels
+            name=job_name, namespace=settings_dict["NAMESPACE"], labels=labels, annotations=annotations
         ),
         spec=client.V1JobSpec(
             template=client.V1PodTemplateSpec(
