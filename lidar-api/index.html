@@ -71,6 +71,8 @@
             padding: 10px;
             background-color: #f8f8f8;
             border-left: 4px solid #4CAF50;
+            max-height: 400px;
+            overflow-y: auto;
         }
         #download-link {
             display: inline-block;
@@ -80,6 +82,75 @@
             color: white;
             text-decoration: none;
             border-radius: 4px;
+        }
+
+        /* JSON formatting styles */
+        .json-container {
+            font-family: 'Consolas', 'Monaco', monospace;
+            background-color: #f5f5f5;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .json-key {
+            color: #0451a5;
+            font-weight: bold;
+        }
+        .json-string {
+            color: #a31515;
+        }
+        .json-number {
+            color: #098658;
+        }
+        .json-boolean {
+            color: #0000ff;
+        }
+        .json-null {
+            color: #999;
+            font-style: italic;
+        }
+        .json-date {
+            color: #811f3f;
+        }
+        .status-panel {
+            margin-top: 10px;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        .status-success {
+            background-color: #e6ffe6;
+            border-left: 4px solid #00cc00;
+        }
+        .status-running {
+            background-color: #e6f7ff;
+            border-left: 4px solid #1e90ff;
+        }
+        .status-error {
+            background-color: #ffebeb;
+            border-left: 4px solid #ff4d4d;
+        }
+        .status-waiting {
+            background-color: #fff9e6;
+            border-left: 4px solid #ffcc00;
+        }
+        .message-time {
+            color: #666;
+            font-size: 0.8em;
+            font-style: italic;
+            margin-bottom: 5px;
+        }
+        .code-block {
+            background-color: #f0f0f0;
+            padding: 8px;
+            border-radius: 3px;
+            font-family: monospace;
+            max-height: 200px;
+            overflow-y: auto;
+            white-space: pre;
         }
     </style>
 </head>
@@ -174,8 +245,8 @@
     <button id="start-job">Start Job</button>
     <button id="stop-job">Stop Job</button>
     <button id="status-job">Get Job Status</button>
-    <p id="status"></p>
-    <p id="status_get"></p>
+    <div id="status"></div>
+    <div id="status_get"></div>
     <a id="download-link" style="display:none;" href="#" download>Download File</a>
 
     <script>
@@ -199,10 +270,88 @@
             });
         }
 
+        // Function to format JSON data with syntax highlighting
+        function formatJsonMessage(data) {
+            // Create container
+            const container = document.createElement('div');
+            container.className = 'json-container';
+            
+            // Determine status class
+            let statusClass = 'status-waiting';
+            if (data.status === 'Complete' || data.status === 'SuccessCriteriaMet') {
+                statusClass = 'status-success';
+            } else if (data.status === 'Running' || data.status === 'Pending') {
+                statusClass = 'status-running';
+            } else if (data.status === 'Failed' || data.status === 'Error') {
+                statusClass = 'status-error';
+            }
+            
+            // Create header with status and job name
+            const header = document.createElement('div');
+            header.className = `status-panel ${statusClass}`;
+            header.innerHTML = `<strong>Job:</strong> ${data.job_name} - <strong>Status:</strong> ${data.status}`;
+            container.appendChild(header);
+            
+            // Add timestamp if available
+            if (data.timestamp) {
+                const timeElement = document.createElement('div');
+                timeElement.className = 'message-time';
+                const date = new Date(data.timestamp);
+                timeElement.textContent = `Updated: ${date.toLocaleString()}`;
+                container.appendChild(timeElement);
+            }
+            
+            // Add processing time if available
+            if (data.total_time !== undefined) {
+                const timeInfo = document.createElement('div');
+                timeInfo.innerHTML = `<strong>Processing time:</strong> ${data.total_time.toFixed(2)}s`;
+                container.appendChild(timeInfo);
+            }
+            
+            // Add message if available
+            if (data.message) {
+                const messageEl = document.createElement('div');
+                messageEl.innerHTML = `<strong>Message:</strong> ${data.message}`;
+                container.appendChild(messageEl);
+            }
+            
+            // Add CLI args if available
+            if (data.cli_args && data.cli_args.length > 0) {
+                const argsEl = document.createElement('div');
+                argsEl.innerHTML = `<strong>Command:</strong>`;
+                const codeEl = document.createElement('div');
+                codeEl.className = 'code-block';
+                codeEl.textContent = data.cli_args.join(' ');
+                argsEl.appendChild(codeEl);
+                container.appendChild(argsEl);
+            }
+            
+            // Add output path if available
+            if (data.output_path) {
+                const outputEl = document.createElement('div');
+                outputEl.innerHTML = `<strong>Output:</strong> ${data.output_path}`;
+                container.appendChild(outputEl);
+            }
+            
+            // Add logs if available
+            if (data.logs) {
+                const logsTitle = document.createElement('div');
+                logsTitle.innerHTML = `<strong>Logs:</strong>`;
+                container.appendChild(logsTitle);
+                
+                const logsEl = document.createElement('div');
+                logsEl.className = 'code-block';
+                logsEl.textContent = data.logs;
+                container.appendChild(logsEl);
+            }
+            
+            return container;
+        }
+
         document.getElementById("status-job").addEventListener("click", async () => {
             try {
                 if (!currentJob || !currentJob.job_name) {
-                    document.getElementById("status_get").innerText = "No active job to check status for";
+                    document.getElementById("status_get").innerHTML = "<p>No active job to check status for</p>";
                     return;
                 }
                 
@@ -219,10 +368,13 @@
                 
                 const data = await response.json();
                 console.log(data);
-                document.getElementById("status_get").innerText = `Job status: ${JSON.stringify(data)}; Time: ${new Date().toLocaleString()}`;
+                
+                const statusGet = document.getElementById("status_get");
+                statusGet.innerHTML = "";
+                statusGet.appendChild(formatJsonMessage(data));
                 
             } catch (error) {
-                document.getElementById("status_get").innerText = `Error: ${error.message}`;
+                document.getElementById("status_get").innerHTML = `<p>Error: ${error.message}</p>`;
                 console.error("Error getting job status:", error);
             }
         });
@@ -230,7 +382,7 @@
         document.getElementById("start-job").addEventListener("click", async () => {
             try {
                 // Clear previous status
-                document.getElementById("status").innerText = "Starting job...";
+                document.getElementById("status").innerHTML = "<p>Starting job...</p>";
                 document.getElementById("download-link").style.display = "none";
                 
                 // Get values from form
@@ -302,13 +454,23 @@
                 currentJob = await response.json();
                 
                 if (currentJob.job_name) {
-                    document.getElementById("status").innerText = `Job started: ${currentJob.job_name}`;
+                    const statusEl = document.getElementById("status");
+                    statusEl.innerHTML = "";
+                    
+                    const startMsg = {
+                        job_name: currentJob.job_name,
+                        status: "Started",
+                        message: `Job ${currentJob.job_name} has been started`,
+                        timestamp: new Date().toISOString()
+                    };
+                    
+                    statusEl.appendChild(formatJsonMessage(startMsg));
                     listenForUpdates(currentJob.job_name);
                 } else {
-                    document.getElementById("status").innerText = "Failed to start job.";
+                    document.getElementById("status").innerHTML = "<p>Failed to start job.</p>";
                 }
             } catch (error) {
-                document.getElementById("status").innerText = `Error: ${error.message}`;
+                document.getElementById("status").innerHTML = `<p>Error: ${error.message}</p>`;
                 console.error("Error starting job:", error);
             }
         });
@@ -316,7 +478,7 @@
         document.getElementById("stop-job").addEventListener("click", async () => {
             try {
                 if (!currentJob || !currentJob.job_name) {
-                    document.getElementById("status").innerText = "No active job to stop";
+                    document.getElementById("status").innerHTML = "<p>No active job to stop</p>";
                     return;
                 }
 
@@ -332,11 +494,22 @@
                 }
 
                 const data = await response.json();
-                document.getElementById("status").innerText = `Job stopped: ${JSON.stringify(data)}`;
+                const statusEl = document.getElementById("status");
+                
+                const stopMsg = {
+                    job_name: currentJob.job_name,
+                    status: "Stopped",
+                    message: `Job ${currentJob.job_name} has been stopped`,
+                    timestamp: new Date().toISOString()
+                };
+                
+                statusEl.innerHTML = "";
+                statusEl.appendChild(formatJsonMessage(stopMsg));
+                
                 currentJob = null; // Reset current job
 
             } catch (error) {
-                document.getElementById("status").innerText = `Error: ${error.message}`;
+                document.getElementById("status").innerHTML = `<p>Error: ${error.message}</p>`;
                 console.error("Error stopping job:", error);
             }
         });
@@ -345,13 +518,25 @@
             const ws = new WebSocket(`${WS_BASE_URL}${PREFIX}/ws/job-status/${jobName}`);
  
             ws.onopen = () => {
-                document.getElementById('status').innerHTML += '<p>WebSocket connection established</p>';
+                const statusEl = document.getElementById('status');
+                const wsMsg = document.createElement('p');
+                wsMsg.textContent = 'WebSocket connection established';
+                statusEl.appendChild(wsMsg);
             };
             
             ws.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
-                    document.getElementById('status').innerHTML += `<p>Message: ${JSON.stringify(data)}</p>`;
+                    console.log("Received message data:", data);
+                    
+                    const statusEl = document.getElementById('status');
+                    
+                    // Create the formatted JSON display
+                    const formattedMsg = formatJsonMessage(data);
+                    statusEl.appendChild(formattedMsg);
+                    
+                    // Auto-scroll to the bottom to show the latest message
+                    statusEl.scrollTop = statusEl.scrollHeight;
 
                     // Check for completion in the parsed data object
                     if (data.status === "Complete" || data.status === "SuccessCriteriaMet") {
@@ -361,18 +546,27 @@
                         downloadLink.innerText = "Download Processed File";
                     }
                 } catch (error) {
-                    document.getElementById('status').innerHTML += `<p>Error parsing message: ${error.message}</p>`;
+                    const statusEl = document.getElementById('status');
+                    const errorMsg = document.createElement('p');
+                    errorMsg.textContent = `Error parsing message: ${error.message}`;
+                    statusEl.appendChild(errorMsg);
                     console.error("WebSocket message parse error:", error);
                 }
             };
 
             ws.onerror = (error) => {
-                document.getElementById('status').innerHTML += `<p>WebSocket Error</p>`;
+                const statusEl = document.getElementById('status');
+                const errorMsg = document.createElement('p');
+                errorMsg.textContent = 'WebSocket Error';
+                statusEl.appendChild(errorMsg);
                 console.error('WebSocket error:', error);
             };
             
             ws.onclose = (event) => {
-                document.getElementById('status').innerHTML += `<p>WebSocket connection closed (Code: ${event.code})</p>`;
+                const statusEl = document.getElementById('status');
+                const closeMsg = document.createElement('p');
+                closeMsg.textContent = `WebSocket connection closed (Code: ${event.code})`;
+                statusEl.appendChild(closeMsg);
             };
         }
     </script>
