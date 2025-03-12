@@ -511,17 +511,15 @@ def generate_k8s_addlidarmanager_job(
         metadata=client.V1ObjectMeta(
             name=job_name,
             namespace=settings_dict["NAMESPACE"],
-            labels={"app": app_name}
+            labels={"app": app_name},
             annotations=annotations,
         ),
         spec=client.V1JobSpec(
             template=client.V1PodTemplateSpec(
-                metadata=client.V1ObjectMeta(
-                    labels={"app": app_name}
-                ),
+                metadata=client.V1ObjectMeta(labels={"app": app_name}),
                 spec=client.V1PodSpec(
                     containers=[container], volumes=volumes, restart_policy="Never"
-                )
+                ),
             ),
             backoff_limit=3,  # No retries
             ttl_seconds_after_finished=7200,  # Auto-delete job after 2 hour
