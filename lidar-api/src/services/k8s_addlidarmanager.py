@@ -485,11 +485,11 @@ def generate_k8s_addlidarmanager_job(
         resources=client.V1ResourceRequirements(
             requests={
                 "cpu": "1000m",  # Request 1 CPU cores
-                "memory": "64Mi",  # Request 128 MiB memory
+                "memory": "128Mi",  # Request 128 MiB memory
             },
             limits={
-                "cpu": "1000m",  # limits 2 CPU cores max
-                "memory": "128Mi",  # limits 256 MiB memory
+                "cpu": "1000m",  # limits 1 CPU cores max
+                "memory": "512Mi",  # limits 512 MiB memory
             },
         ),
     )
