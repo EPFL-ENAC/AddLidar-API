@@ -8,7 +8,6 @@ import time
 import asyncio
 import uuid
 from src.services.k8s_addlidarmanager import (
-    process_point_cloud,
     register_websocket,
     start_watching_job,
     job_statuses as k8s_job_statuses,
@@ -20,7 +19,6 @@ from src.services.k8s_addlidarmanager import (
 from src.api.models import PointCloudRequest, ProcessPointCloudResponse
 
 # Replace Docker service import with Kubernetes service
-# from src.services.k8s_addlidarmanager import process_point_cloud, track_job_status, start_watching_job
 from src.config.settings import settings
 from src.services.parse_docker_error import parse_cli_error
 
@@ -86,113 +84,6 @@ async def return_file_from_output(
     return FileResponse(
         path=full_output_path, media_type=content_type, filename=file_name
     )
-
-
-@router.get("/process-point-cloud")
-async def process_point_cloud_endpoint(
-    background_tasks: BackgroundTasks,
-    file_path: str,
-    remove_attribute: list[str] | None = None,
-    remove_all_attributes: bool = False,
-    remove_color: bool = False,
-    format: str | None = None,
-    line: int | None = None,
-    returns: int | None = None,
-    number: int | None = None,
-    density: float | None = None,
-    roi: str | None = None,
-    outcrs: str | None = None,
-    incrs: str | None = None,
-) -> Response:
-    output_file_path = None
-    try:
-        # Convert query params to PointCloudRequest model
-        request = PointCloudRequest(
-            file_path=file_path,
-            remove_attribute=remove_attribute,
-            remove_all_attributes=remove_all_attributes,
-            remove_color=remove_color,
-            format=format,
-            line=line,
-            returns=returns,
-            number=number,
-            density=density,
-            roi=tuple(map(float, roi.split(","))) if roi else None,
-            outcrs=outcrs,
-            incrs=incrs,
-        )
-
-        cli_args = request.to_cli_arguments()
-        logger.debug(f"CLI arguments: {cli_args}")
-
-        # Process point cloud using Kubernetes service instead of Docker
-        # The Kubernetes service automatically adds the -o parameter
-        output, exit_code, output_file_path = process_point_cloud(cli_args=cli_args)
-
-        # If exit code is 0, return the file data
-        if exit_code == 0 and output_file_path:
-            return await return_file_from_output(
-                file_format=format,
-                output_file_path=output_file_path,
-            )
-
-        # If there was an error, return JSON response
-        error_message = output.decode("utf-8", errors="replace")
-        message = parse_cli_error(error_message)
-        return JSONResponse(
-            status_code=400,
-            content=ProcessPointCloudResponse(
-                status="error",
-                error_type="cli_error",
-                error_details={
-                    "message": message,
-                    "cli_args": cli_args,
-                    "exit_code": exit_code,
-                },
-                output="",
-            ).model_dump(),
-        )
-
-    except ValidationError as e:
-        logger.error(f"Validation error: {str(e)}")
-        return JSONResponse(
-            status_code=400,
-            content=ProcessPointCloudResponse(
-                status="error",
-                output=str(e),
-                error_type="validation_error",
-                error_details={"errors": jsonable_encoder(e.errors())},
-            ).model_dump(),
-        )
-    except ValueError as e:
-        logger.error(f"Value error: {str(e)}")
-        return JSONResponse(
-            status_code=400,
-            content=ProcessPointCloudResponse(
-                status="error",
-                output=str(e),
-                error_type="value_error",
-                error_details={"message": str(e)},
-            ).model_dump(),
-        )
-    except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content=ProcessPointCloudResponse(
-                status="error",
-                output=str(e),
-                error_type="internal_error",
-                error_details={"message": "An unexpected error occurred"},
-            ).model_dump(),
-        )
-    # finally:
-    #     # Remove the output file after sending the response
-    #     if output_file_path:
-    #         full_output_path = os.path.join(
-    #             settings.DEFAULT_OUTPUT_ROOT, output_file_path
-    #         )
-    #         background_tasks.add_task(remove_output_file, full_output_path)
 
 
 @router.get("/health")

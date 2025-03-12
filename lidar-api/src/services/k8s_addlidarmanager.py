@@ -532,71 +532,6 @@ def generate_k8s_addlidarmanager_job(
     return job_name
 
 
-def generate_k8s_hello_world(job_name: str, unique_filename: str) -> None:
-    # Create API clients
-    batch_v1 = client.BatchV1Api()
-    settings_dict = get_settings()
-
-    # Define volume and volume mounts for PVC
-    volumes = [
-        client.V1Volume(
-            name="data-output-volume",
-            persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(
-                claim_name=settings_dict["PVC_OUTPUT_NAME"]
-            ),
-        ),
-    ]
-    volume_mounts = [
-        client.V1VolumeMount(
-            name="data-output-volume", mount_path=settings_dict["OUTPUT_PATH"]
-        ),
-    ]
-
-    # Define job container with simple echo command
-    container = client.V1Container(
-        name="hello-world",
-        image="busybox",
-        command=[
-            "sh",
-            "-c",
-            f"echo 'Hello, Kubernetes!' > /output/{unique_filename} || exit 1",
-        ],
-        volume_mounts=volume_mounts,
-        resources=client.V1ResourceRequirements(
-            requests={
-                "cpu": "100m",  # Request 0.1 CPU cores
-                "memory": "256Mi",  # Request 256 MiB memory
-            },
-            limits={
-                "cpu": "200m",  # Limit to 0.5 CPU cores
-                "memory": "512Mi",  # Limit to 1 GiB memory
-            },
-        ),
-    )
-
-    # Define job
-    job = client.V1Job(
-        api_version="batch/v1",
-        kind="Job",
-        metadata=client.V1ObjectMeta(
-            name=job_name, namespace=settings_dict["NAMESPACE"]
-        ),
-        spec=client.V1JobSpec(
-            template=client.V1PodTemplateSpec(
-                spec=client.V1PodSpec(
-                    containers=[container], volumes=volumes, restart_policy="Never"
-                )
-            ),
-            backoff_limit=0,  # No retries
-            ttl_seconds_after_finished=7200,  # Auto-delete job after 1 hour
-        ),
-    )
-
-    # Create the job
-    batch_v1.create_namespaced_job(namespace=settings_dict["NAMESPACE"], body=job)
-    return job_name
-
-
 def create_k8s_job(job_name: str, cli_args: Optional[List[str]]) -> None:
     """
     Create a Kubernetes job that runs a simple hello world command.
@@ -627,51 +562,6 @@ def create_k8s_job(job_name: str, cli_args: Optional[List[str]]) -> None:
         )
         logger.info(
             f"Created job {job_name}, output will be saved to {unique_filename}, cli_args: {cli_args}"
-        )
-        # generate_k8s_hello_world(job_name, unique_filename)
-        # update_job_statuses(job_name, JobStatus(
-        #     job_name=job_name,
-        #     status="Created",
-        #     message="Job is running",
-        #     output_path=unique_filename,
-        #     args=[f"echo 'Hello, Kubernetes!' > /output/{unique_filename} || exit 1"]
-        # ), asyncio.get_event_loop())
-        logger.info(f"Created job {job_name}")
-        return job_name
-    except Exception as e:
-        error_msg = f"Failed to create or run job {job_name}: {str(e)}"
-        logger.error(error_msg)
-        return error_msg, 1
-
-
-def create_k8s_hello_world_job(job_name: str, cli_args: Optional[List[str]]) -> None:
-    """
-    Create a Kubernetes job that runs a simple hello world command.
-
-    Args:
-        job_name: Name of the job to create
-
-    Returns:
-        Tuple[str, int]: The output (stdout or stderr) and exit code
-    """
-    # settings = get_settings()
-
-    try:
-        # Generate a unique filename for output
-        unique_filename = f"output_{uuid.uuid4().hex}.bin"
-        generate_k8s_hello_world(job_name, unique_filename)
-        update_job_statuses(
-            job_name,
-            JobStatus(
-                job_name=job_name,
-                status="Created",
-                message="Job is running",
-                output_path=unique_filename,
-                cli_args=[
-                    f"echo 'Hello, Kubernetes!' > /output/{unique_filename} || exit 1"
-                ],
-            ),
-            asyncio.get_event_loop(),
         )
         logger.info(f"Created job {job_name}")
         return job_name
