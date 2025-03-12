@@ -7,9 +7,14 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            max-width: 800px;
+            max-width: 1200px;
             margin: 0 auto;
             padding: 20px;
+        }
+        .result-container {
+            display: grid;
+            grid-gap: 1rem;
+            grid-template-columns: 1fr 1fr 1fr;
         }
         .form-container {
             border: 1px solid #ccc;
@@ -252,9 +257,11 @@
     <button id="stop-job">Stop Job</button>
     <button id="status-job">Get Job Status</button>
     <button id="check-health">Check API Health</button>
-    <div id="status"></div>
-    <div id="status_get"></div>
-    <div id="health_status"></div>
+    <div class="result-container">
+        <div id="status"></div>
+        <div id="status_get"></div>
+        <div id="health_status"></div>
+    </div>
     <a id="download-link" style="display:none;" href="#" download>Download File</a>
 
     <script>

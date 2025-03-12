@@ -237,7 +237,7 @@ def watch_job_status_thread(
                         loop,
                     )
                     if status in AUTHORIZED_STATUSES:
-                        # delete_k8s_job(job_name, namespace)
+                        delete_k8s_job(job_name, namespace)
                         w.stop()
                         break
 
@@ -744,7 +744,7 @@ def process_point_cloud(cli_args: List[str]) -> Tuple[bytes, int, Optional[str]]
         logs_bytes = logs.encode("utf-8")
 
         # Clean up job
-        # delete_k8s_job(job_name, settings_dict["NAMESPACE"])
+        delete_k8s_job(job_name, settings_dict["NAMESPACE"])
 
         # Return appropriate results based on job status
         if job_status["succeeded"]:
@@ -756,7 +756,7 @@ def process_point_cloud(cli_args: List[str]) -> Tuple[bytes, int, Optional[str]]
         error_msg = f"Kubernetes job error: {str(e)}"
         logger.error(error_msg)
         # Clean up job
-        # delete_k8s_job(job_name, settings_dict["NAMESPACE"])
+        delete_k8s_job(job_name, settings_dict["NAMESPACE"])
         return error_msg.encode("utf-8"), 1, None
 
 
