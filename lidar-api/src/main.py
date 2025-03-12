@@ -3,31 +3,14 @@ from src.api.routes import router
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 import logging
-from fastapi.middleware.cors import CORSMiddleware
-from src.config.settings import settings
 
 app = FastAPI()
 
-if settings.ENVIRONMENT == "development":
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-    # Configure logging
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-else:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
 
 @app.exception_handler(ValidationError)

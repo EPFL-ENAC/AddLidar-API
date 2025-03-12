@@ -499,10 +499,10 @@ def generate_k8s_addlidarmanager_job(
     environment = settings_dict["ENVIRONMENT"]
 
     if environment == "production":
-    #     labels["argocd.argoproj.io/instance"] = "addlidar-api-prod"
+        #     labels["argocd.argoproj.io/instance"] = "addlidar-api-prod"
         annotations["argocd.argoproj.io/instance"] = "addlidar-api-prod"
     else:  # development or any other environment
-    #     labels["argocd.argoproj.io/instance"] = "addlidar-api-dev"
+        #     labels["argocd.argoproj.io/instance"] = "addlidar-api-dev"
         annotations["argocd.argoproj.io/instance"] = "addlidar-api-dev"
 
     # Define job
