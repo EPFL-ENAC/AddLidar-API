@@ -15,3 +15,5 @@ Add more tests
 
 - since we're having inmemory status, we chould on ping, check that the job still exist.
 If not, maybe try deleting it on kube with safe failing, and then send a message and close connection
+
+- Add an option to the start-job route to delete on job download or after 3 or 4 download (other options would be to have a background task that clean up job, and the clean up job would delete the file, not sure how to do it yet)
