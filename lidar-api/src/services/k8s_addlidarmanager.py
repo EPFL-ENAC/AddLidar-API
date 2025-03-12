@@ -521,7 +521,8 @@ def generate_k8s_addlidarmanager_job(
                     containers=[container], volumes=volumes, restart_policy="Never"
                 )
             ),
-            backoff_limit=0,  # No retries
+            backoff_limit=3,  # No retries
+            delete_pods=False,  # Delete pods when job is deleted for now
             ttl_seconds_after_finished=7200,  # Auto-delete job after 2 hour
         ),
     )
