@@ -14,6 +14,7 @@ from src.services.k8s_addlidarmanager import (
     job_statuses as k8s_job_statuses,
     create_k8s_job,
     active_connections,
+    delete_k8s_job,
 )
 from src.api.models import PointCloudRequest, ProcessPointCloudResponse
 
@@ -203,6 +204,63 @@ async def health_check() -> dict:
 
 
 # In-memory storage for job statuses (Use a DB for production)
+
+
+@router.post("/stop-job")
+async def stop_job(job_name: str):
+    """Stop a Kubernetes job by deleting it.
+    Also stops the job status watcher for the job.
+    Also delete the output file if it exists.
+    Also delete the job status from the in-memory storage.
+    Also delete the job name from the active connections.
+
+    Args:
+        job_name: Name of the job to stop
+
+    Returns:
+        dict: Job name and status message
+    """
+    try:
+        # Stop the Kubernetes job
+        # Assuming you have a function `delete_k8s_job` to delete the job
+        delete_k8s_job(job_name, namespace=settings.NAMESPACE)
+        logger.info(f"Stopped Kubernetes job: {job_name}")
+
+        # Stop the job status watcher
+        if job_name in active_connections:
+            websocket = active_connections[job_name]
+            await websocket.close()
+            del active_connections[job_name]
+            logger.info(f"Stopped job status watcher for job: {job_name}")
+
+        # Delete the output file if it exists
+        job_status = k8s_job_statuses.get(job_name, {})
+        output_file_path = job_status.get("output_path")
+        if output_file_path:
+            full_output_path = os.path.join(
+                settings.DEFAULT_OUTPUT_ROOT, output_file_path
+            )
+            if os.path.exists(full_output_path):
+                os.unlink(full_output_path)
+                logger.info(f"Deleted output file for job: {job_name}")
+
+        # Delete the job status from the in-memory storage
+        if job_name in k8s_job_statuses:
+            del k8s_job_statuses[job_name]
+            logger.info(f"Deleted job status for job: {job_name}")
+
+        return {"job_name": job_name, "status": "Job stopped successfully"}
+
+    except Exception as e:
+        logger.error(f"Error stopping job {job_name}: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "job_name": job_name,
+                "status": "Error",
+                "message": f"Error stopping job: {str(e)}",
+            },
+        )
 
 
 @router.post("/start-job/")

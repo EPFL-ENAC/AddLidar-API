@@ -41,4 +41,4 @@ ENV PATH="/app/.venv/bin:$PATH"
 EXPOSE 8081
 
 # Run the application using uv run
-CMD ["uv", "run", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8081", "--proxy-headers", "--log-level", "info", "--access-log"]
+CMD ["uv", "run", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8081", "--proxy-headers", "--log-level", "debug", "--access-log"]
