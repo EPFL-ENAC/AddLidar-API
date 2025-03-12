@@ -510,7 +510,10 @@ def generate_k8s_addlidarmanager_job(
         api_version="batch/v1",
         kind="Job",
         metadata=client.V1ObjectMeta(
-            name=job_name, namespace=settings_dict["NAMESPACE"], labels=labels, annotations=annotations
+            name=job_name,
+            namespace=settings_dict["NAMESPACE"],
+            labels=labels,
+            annotations=annotations,
         ),
         spec=client.V1JobSpec(
             template=client.V1PodTemplateSpec(

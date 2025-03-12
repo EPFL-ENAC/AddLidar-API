@@ -243,12 +243,11 @@ async def stop_job(job_name: str):
             del k8s_job_statuses[job_name]
             logger.info(f"Deleted job status for job: {job_name}")
 
-
         # Stop the job status watcher
         if job_name in active_connections:
             websocket = active_connections[job_name]
             try:
-                if (websocket.client_state == 1):
+                if websocket.client_state == 1:
                     await websocket.close
             except Exception as e:
                 logger.error(f"Error closing WebSocket for job {job_name}: {str(e)}")
@@ -490,8 +489,24 @@ async def websocket_health_check() -> dict:
     return {
         "status": "healthy",
         "timestamp": time.time(),
-        "active_connections": len(active_connections.keys()) if hasattr(active_connections, "keys") else sum(1 for _ in active_connections) if hasattr(active_connections, "__iter__") else 0,
+        "active_connections": (
+            len(active_connections.keys())
+            if hasattr(active_connections, "keys")
+            else (
+                sum(1 for _ in active_connections)
+                if hasattr(active_connections, "__iter__")
+                else 0
+            )
+        ),
         "job_statuses": len(k8s_job_statuses),
         "namespace": settings.NAMESPACE,
-        "watch_connections": len(watch_control.keys()) if hasattr(watch_control, "keys") else sum(1 for _ in watch_control) if hasattr(watch_control, "__iter__") else 0,
+        "watch_connections": (
+            len(watch_control.keys())
+            if hasattr(watch_control, "keys")
+            else (
+                sum(1 for _ in watch_control)
+                if hasattr(watch_control, "__iter__")
+                else 0
+            )
+        ),
     }
