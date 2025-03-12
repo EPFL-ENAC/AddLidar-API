@@ -1,0 +1,14 @@
+# Configuration for lefthook git hooks
+# https://github.com/evilmartians/lefthook
+
+pre-commit:
+  parallel: true
+  commands:
+    format:
+      root: "lidar-api/"
+      glob: "*.py"
+      run: make format
+    lint:
+      root: "lidar-api/"
+      glob: "*.py"
+      run: make lint
