@@ -1,681 +1,766 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AddLidar API</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        .result-container {
-            display: grid;
-            grid-gap: 1rem;
-            grid-template-columns: 1fr 1fr 1fr;
-        }
-        .form-container {
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            padding: 15px;
-            margin-bottom: 20px;
-        }
-        .form-group {
-            margin-bottom: 10px;
-        }
-        label {
-            display: inline-block;
-            width: 180px;
-            font-weight: bold;
-        }
-        input, select {
-            width: 300px;
-            padding: 5px;
-            border: 1px solid #ccc;
-            border-radius: 3px;
-        }
-        button {
-            background-color: #4CAF50;
-            color: white;
-            padding: 10px 15px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            margin-right: 10px;
-        }
-        button:hover {
-            background-color: #45a049;
-        }
-        .collapsible {
-            background-color: #f1f1f1;
-            cursor: pointer;
-            padding: 10px;
-            width: 100%;
-            text-align: left;
-            border: none;
-            outline: none;
-        }
-        .active, .collapsible:hover {
-            background-color: #ddd;
-        }
-        .content {
-            display: none;
-            padding: 10px;
-            overflow: hidden;
-            background-color: #f9f9f9;
-        }
-        .checkbox-label {
-            display: inline;
-            width: auto;
-            margin-right: 10px;
-        }
-        #status, #status_get, #health_status {
-            margin-top: 20px;
-            padding: 10px;
-            background-color: #f8f8f8;
-            border-left: 4px solid #4CAF50;
-            max-height: 400px;
-            overflow-y: auto;
-        }
-        #download-link {
-            display: inline-block;
-            margin-top: 10px;
-            padding: 10px 15px;
-            background-color: #2196F3;
-            color: white;
-            text-decoration: none;
-            border-radius: 4px;
-        }
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      .result-container {
+        display: grid;
+        grid-gap: 1rem;
+        grid-template-columns: 1fr 1fr 1fr;
+      }
+      .form-container {
+        border: 1px solid #ccc;
+        border-radius: 5px;
+        padding: 15px;
+        margin-bottom: 20px;
+      }
+      .form-group {
+        margin-bottom: 10px;
+      }
+      label {
+        display: inline-block;
+        width: 180px;
+        font-weight: bold;
+      }
+      input,
+      select {
+        width: 300px;
+        padding: 5px;
+        border: 1px solid #ccc;
+        border-radius: 3px;
+      }
+      button {
+        background-color: #4caf50;
+        color: white;
+        padding: 10px 15px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        margin-right: 10px;
+      }
+      button:hover {
+        background-color: #45a049;
+      }
+      .collapsible {
+        background-color: #f1f1f1;
+        cursor: pointer;
+        padding: 10px;
+        width: 100%;
+        text-align: left;
+        border: none;
+        outline: none;
+      }
+      .active,
+      .collapsible:hover {
+        background-color: #ddd;
+      }
+      .content {
+        display: none;
+        padding: 10px;
+        overflow: hidden;
+        background-color: #f9f9f9;
+      }
+      .checkbox-label {
+        display: inline;
+        width: auto;
+        margin-right: 10px;
+      }
+      #status,
+      #status_get,
+      #health_status {
+        margin-top: 20px;
+        padding: 10px;
+        background-color: #f8f8f8;
+        border-left: 4px solid #4caf50;
+        max-height: 400px;
+        overflow-y: auto;
+      }
+      #download-link {
+        display: inline-block;
+        margin-top: 10px;
+        padding: 10px 15px;
+        background-color: #2196f3;
+        color: white;
+        text-decoration: none;
+        border-radius: 4px;
+      }
 
-        /* JSON formatting styles */
-        .json-container {
-            font-family: 'Consolas', 'Monaco', monospace;
-            background-color: #f5f5f5;
-            border-radius: 4px;
-            padding: 10px;
-            margin: 10px 0;
-            border: 1px solid #ddd;
-            overflow-x: auto;
-            white-space: pre-wrap;
-            word-break: break-word;
-        }
-        .json-key {
-            color: #0451a5;
-            font-weight: bold;
-        }
-        .json-string {
-            color: #a31515;
-        }
-        .json-number {
-            color: #098658;
-        }
-        .json-boolean {
-            color: #0000ff;
-        }
-        .json-null {
-            color: #999;
-            font-style: italic;
-        }
-        .json-date {
-            color: #811f3f;
-        }
-        .status-panel {
-            margin-top: 10px;
-            padding: 8px;
-            border-radius: 4px;
-        }
-        .status-success {
-            background-color: #e6ffe6;
-            border-left: 4px solid #00cc00;
-        }
-        .status-running {
-            background-color: #e6f7ff;
-            border-left: 4px solid #1e90ff;
-        }
-        .status-error {
-            background-color: #ffebeb;
-            border-left: 4px solid #ff4d4d;
-        }
-        .status-waiting {
-            background-color: #fff9e6;
-            border-left: 4px solid #ffcc00;
-        }
-        .message-time {
-            color: #666;
-            font-size: 0.8em;
-            font-style: italic;
-            margin-bottom: 5px;
-        }
-        .code-block {
-            background-color: #f0f0f0;
-            padding: 8px;
-            border-radius: 3px;
-            font-family: monospace;
-            max-height: 200px;
-            overflow-y: auto;
-            white-space: pre;
-        }
-        #check-health {
-            background-color: #2196F3; /* Different color to distinguish from other buttons */
-        }
-        #check-health:hover {
-            background-color: #0b7dda;
-        }
+      /* JSON formatting styles */
+      .json-container {
+        font-family: "Consolas", "Monaco", monospace;
+        background-color: #f5f5f5;
+        border-radius: 4px;
+        padding: 10px;
+        margin: 10px 0;
+        border: 1px solid #ddd;
+        overflow-x: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .json-key {
+        color: #0451a5;
+        font-weight: bold;
+      }
+      .json-string {
+        color: #a31515;
+      }
+      .json-number {
+        color: #098658;
+      }
+      .json-boolean {
+        color: #0000ff;
+      }
+      .json-null {
+        color: #999;
+        font-style: italic;
+      }
+      .json-date {
+        color: #811f3f;
+      }
+      .status-panel {
+        margin-top: 10px;
+        padding: 8px;
+        border-radius: 4px;
+      }
+      .status-success {
+        background-color: #e6ffe6;
+        border-left: 4px solid #00cc00;
+      }
+      .status-running {
+        background-color: #e6f7ff;
+        border-left: 4px solid #1e90ff;
+      }
+      .status-error {
+        background-color: #ffebeb;
+        border-left: 4px solid #ff4d4d;
+      }
+      .status-waiting {
+        background-color: #fff9e6;
+        border-left: 4px solid #ffcc00;
+      }
+      .message-time {
+        color: #666;
+        font-size: 0.8em;
+        font-style: italic;
+        margin-bottom: 5px;
+      }
+      .code-block {
+        background-color: #f0f0f0;
+        padding: 8px;
+        border-radius: 3px;
+        font-family: monospace;
+        max-height: 200px;
+        overflow-y: auto;
+        white-space: pre;
+      }
+      #check-health {
+        background-color: #2196f3; /* Different color to distinguish from other buttons */
+      }
+      #check-health:hover {
+        background-color: #0b7dda;
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
     <h1>Welcome to AddLidar API</h1>
     <h2>Kubernetes Job Manager</h2>
-    
+
     <button class="collapsible">Job Configuration</button>
     <div class="content">
-        <div class="form-container">
-            <form id="job-form">
-                <div class="form-group">
-                    <label for="file_path">File Path (required):</label>
-                    <input type="text" id="file_path" value="/LiDAR/0001_Mission_Root/02_LAS_PCD/all_grouped_high_veg_10th_point.las" required>
-                    <span class="help">Path to the input point cloud file (inside mounted volume)</span>
-                </div>
-                
-                <div class="form-group">
-                    <label for="format">Output Format:</label>
-                    <select id="format">
-                        <option value="pcd-ascii" selected>pcd-ascii</option>
-                        <option value="pcd-bin">pcd-bin</option>
-                        <option value="lasv14">lasv14</option>
-                        <option value="lasv13">lasv13</option>
-                        <option value="lasv12">lasv12</option>
-                    </select>
-                </div>
-                
-                <div class="form-group">
-                    <label for="outcrs">Output CRS:</label>
-                    <input type="text" id="outcrs" value="EPSG:4326">
-                    <span class="help">e.g., EPSG:4326</span>
-                </div>
-                
-                <div class="form-group">
-                    <label for="incrs">Input CRS Override:</label>
-                    <input type="text" id="incrs" placeholder="e.g., EPSG:2056">
-                    <span class="help">Override input CRS</span>
-                </div>
-                
-                <div class="form-group">
-                    <label for="line">Line Index:</label>
-                    <input type="number" id="line" value="1">
-                    <span class="help">The index of the line to export (-1 for no limit)</span>
-                </div>
-                
-                <div class="form-group">
-                    <label for="returns">Max Return Index:</label>
-                    <input type="number" id="returns" value="-1">
-                    <span class="help">The maximal return index to use (-1 for no limit)</span>
-                </div>
-                
-                <div class="form-group">
-                    <label for="number">Max Points:</label>
-                    <input type="number" id="number" value="-1">
-                    <span class="help">The maximal number of points (-1 for no limit)</span>
-                </div>
-                
-                <div class="form-group">
-                    <label for="density">Max Density:</label>
-                    <input type="number" id="density" step="0.01">
-                    <span class="help">The maximal density (points per m²)</span>
-                </div>
-                
-                <div class="form-group">
-                    <label for="roi">Region of Interest:</label>
-                    <input type="text" id="roi" placeholder="x0,y0,z0,dx,dy,dz,rx,ry,rz">
-                    <span class="help">Format: x0,y0,z0,dx,dy,dz,rx,ry,rz</span>
-                </div>
-                
-                <div class="form-group">
-                    <label for="remove_attribute">Remove Attribute:</label>
-                    <input type="text" id="remove_attribute" placeholder="Comma-separated attribute names">
-                    <span class="help">Comma-separated list of attributes to remove</span>
-                </div>
-                
-                <div class="form-group">
-                    <input type="checkbox" id="remove_all_attributes">
-                    <label for="remove_all_attributes" class="checkbox-label">Remove All Attributes</label>
-                    <span class="help">Remove all non-geometry attributes</span>
-                </div>
-                
-                <div class="form-group">
-                    <input type="checkbox" id="remove_color">
-                    <label for="remove_color" class="checkbox-label">Remove Color</label>
-                    <span class="help">Remove color data</span>
-                </div>
-            </form>
-        </div>
+      <div class="form-container">
+        <form id="job-form">
+          <div class="form-group">
+            <label for="file_path">File Path (required):</label>
+            <input
+              type="text"
+              id="file_path"
+              value="/0001_Mission_Root/02_LAS_PCD/all_grouped_high_veg_10th_point.las"
+              required
+            />
+            <span class="help"
+              >Path to the input point cloud file (inside mounted volume)</span
+            >
+          </div>
+
+          <div class="form-group">
+            <label for="format">Output Format:</label>
+            <select id="format">
+              <option value="pcd-ascii" selected>pcd-ascii</option>
+              <option value="pcd-bin">pcd-bin</option>
+              <option value="lasv14">lasv14</option>
+              <option value="lasv13">lasv13</option>
+              <option value="lasv12">lasv12</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="outcrs">Output CRS:</label>
+            <input type="text" id="outcrs" value="EPSG:4326" />
+            <span class="help">e.g., EPSG:4326</span>
+          </div>
+
+          <div class="form-group">
+            <label for="incrs">Input CRS Override:</label>
+            <input type="text" id="incrs" placeholder="e.g., EPSG:2056" />
+            <span class="help">Override input CRS</span>
+          </div>
+
+          <div class="form-group">
+            <label for="line">Line Index:</label>
+            <input type="number" id="line" value="1" />
+            <span class="help"
+              >The index of the line to export (-1 for no limit)</span
+            >
+          </div>
+
+          <div class="form-group">
+            <label for="returns">Max Return Index:</label>
+            <input type="number" id="returns" value="-1" />
+            <span class="help"
+              >The maximal return index to use (-1 for no limit)</span
+            >
+          </div>
+
+          <div class="form-group">
+            <label for="number">Max Points:</label>
+            <input type="number" id="number" value="-1" />
+            <span class="help"
+              >The maximal number of points (-1 for no limit)</span
+            >
+          </div>
+
+          <div class="form-group">
+            <label for="density">Max Density:</label>
+            <input type="number" id="density" step="0.01" />
+            <span class="help">The maximal density (points per m²)</span>
+          </div>
+
+          <div class="form-group">
+            <label for="roi">Region of Interest:</label>
+            <input
+              type="text"
+              id="roi"
+              placeholder="x0,y0,z0,dx,dy,dz,rx,ry,rz"
+            />
+            <span class="help">Format: x0,y0,z0,dx,dy,dz,rx,ry,rz</span>
+          </div>
+
+          <div class="form-group">
+            <label for="remove_attribute">Remove Attribute:</label>
+            <input
+              type="text"
+              id="remove_attribute"
+              placeholder="Comma-separated attribute names"
+            />
+            <span class="help"
+              >Comma-separated list of attributes to remove</span
+            >
+          </div>
+
+          <div class="form-group">
+            <input type="checkbox" id="remove_all_attributes" />
+            <label for="remove_all_attributes" class="checkbox-label"
+              >Remove All Attributes</label
+            >
+            <span class="help">Remove all non-geometry attributes</span>
+          </div>
+
+          <div class="form-group">
+            <input type="checkbox" id="remove_color" />
+            <label for="remove_color" class="checkbox-label"
+              >Remove Color</label
+            >
+            <span class="help">Remove color data</span>
+          </div>
+        </form>
+      </div>
     </div>
-    
+
     <button id="start-job">Start Job</button>
     <button id="stop-job">Stop Job</button>
     <button id="status-job">Get Job Status</button>
     <button id="check-health">Check API Health</button>
     <div class="result-container">
-        <div id="status"></div>
-        <div id="status_get"></div>
-        <div id="health_status"></div>
+      <div id="status"></div>
+      <div id="status_get"></div>
+      <div id="health_status"></div>
     </div>
-    <a id="download-link" style="display:none;" href="#" download>Download File</a>
+    <a id="download-link" style="display: none" href="#" download
+      >Download File</a
+    >
 
     <script>
-        // Use consistent hostname across HTTP and WebSocket requests
-        const API_BASE_URL = `${window.location.protocol}//${window.location.hostname}:${window.location.port}`;
-        const WS_BASE_URL = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.hostname}:${window.location.port}`;
-        const PREFIX = ['localhost', '0.0.0.0', '127.0.0.1', '::1'].includes(window.location.hostname) ? '' : '/api';
-        let currentJob = null;
+      // Use consistent hostname across HTTP and WebSocket requests
+      const API_BASE_URL = `${window.location.protocol}//${window.location.hostname}:${window.location.port}`;
+      const WS_BASE_URL = `${
+        window.location.protocol === "https:" ? "wss:" : "ws:"
+      }//${window.location.hostname}:${window.location.port}`;
+      const PREFIX = ["localhost", "0.0.0.0", "127.0.0.1", "::1"].includes(
+        window.location.hostname
+      )
+        ? ""
+        : "/api";
+      let currentJob = null;
 
-        // Collapsible functionality
-        const coll = document.getElementsByClassName("collapsible");
-        for (let i = 0; i < coll.length; i++) {
-            coll[i].addEventListener("click", function() {
-                this.classList.toggle("active");
-                const content = this.nextElementSibling;
-                if (content.style.display === "block") {
-                    content.style.display = "none";
-                } else {
-                    content.style.display = "block";
-                }
-            });
+      // Collapsible functionality
+      const coll = document.getElementsByClassName("collapsible");
+      for (let i = 0; i < coll.length; i++) {
+        coll[i].addEventListener("click", function () {
+          this.classList.toggle("active");
+          const content = this.nextElementSibling;
+          if (content.style.display === "block") {
+            content.style.display = "none";
+          } else {
+            content.style.display = "block";
+          }
+        });
+      }
+
+      // Function to format JSON data with syntax highlighting
+      function formatJsonMessage(data) {
+        // Create container
+        const container = document.createElement("div");
+        container.className = "json-container";
+
+        // Determine status class
+        let statusClass = "status-waiting";
+        if (
+          data.status === "Complete" ||
+          data.status === "SuccessCriteriaMet"
+        ) {
+          statusClass = "status-success";
+        } else if (data.status === "Running" || data.status === "Pending") {
+          statusClass = "status-running";
+        } else if (data.status === "Failed" || data.status === "Error") {
+          statusClass = "status-error";
         }
 
-        // Function to format JSON data with syntax highlighting
-        function formatJsonMessage(data) {
-            // Create container
-            const container = document.createElement('div');
-            container.className = 'json-container';
-            
-            // Determine status class
-            let statusClass = 'status-waiting';
-            if (data.status === 'Complete' || data.status === 'SuccessCriteriaMet') {
-                statusClass = 'status-success';
-            } else if (data.status === 'Running' || data.status === 'Pending') {
-                statusClass = 'status-running';
-            } else if (data.status === 'Failed' || data.status === 'Error') {
-                statusClass = 'status-error';
-            }
-            
-            // Create header with status and job name
-            const header = document.createElement('div');
-            header.className = `status-panel ${statusClass}`;
-            header.innerHTML = `<strong>Job:</strong> ${data.job_name} - <strong>Status:</strong> ${data.status}`;
-            container.appendChild(header);
-            
-            // Add timestamp if available
-            if (data.timestamp) {
-                const timeElement = document.createElement('div');
-                timeElement.className = 'message-time';
-                const date = new Date(data.timestamp);
-                timeElement.textContent = `Updated: ${date.toLocaleString()}`;
-                container.appendChild(timeElement);
-            }
-            
-            // Add processing time if available
-            if (data.total_time !== undefined) {
-                const timeInfo = document.createElement('div');
-                timeInfo.innerHTML = `<strong>Processing time:</strong> ${data.total_time.toFixed(2)}s`;
-                container.appendChild(timeInfo);
-            }
-            
-            // Add message if available
-            if (data.message) {
-                const messageEl = document.createElement('div');
-                messageEl.innerHTML = `<strong>Message:</strong> ${data.message}`;
-                container.appendChild(messageEl);
-            }
-            
-            // Add CLI args if available
-            if (data.cli_args && data.cli_args.length > 0) {
-                const argsEl = document.createElement('div');
-                argsEl.innerHTML = `<strong>Command:</strong>`;
-                const codeEl = document.createElement('div');
-                codeEl.className = 'code-block';
-                codeEl.textContent = data.cli_args.join(' ');
-                argsEl.appendChild(codeEl);
-                container.appendChild(argsEl);
-            }
-            
-            // Add output path if available
-            if (data.output_path) {
-                const outputEl = document.createElement('div');
-                outputEl.innerHTML = `<strong>Output:</strong> ${data.output_path}`;
-                container.appendChild(outputEl);
-            }
-            
-            // Add logs if available
-            if (data.logs) {
-                const logsTitle = document.createElement('div');
-                logsTitle.innerHTML = `<strong>Logs:</strong>`;
-                container.appendChild(logsTitle);
-                
-                const logsEl = document.createElement('div');
-                logsEl.className = 'code-block';
-                logsEl.textContent = data.logs;
-                container.appendChild(logsEl);
-            }
-            
-            return container;
+        // Create header with status and job name
+        const header = document.createElement("div");
+        header.className = `status-panel ${statusClass}`;
+        header.innerHTML = `<strong>Job:</strong> ${data.job_name} - <strong>Status:</strong> ${data.status}`;
+        container.appendChild(header);
+
+        // Add timestamp if available
+        if (data.timestamp) {
+          const timeElement = document.createElement("div");
+          timeElement.className = "message-time";
+          const date = new Date(data.timestamp);
+          timeElement.textContent = `Updated: ${date.toLocaleString()}`;
+          container.appendChild(timeElement);
         }
 
-        // Function to format health data
-        function formatHealthData(data) {
-            const container = document.createElement('div');
-            container.className = 'json-container';
-            
-            const statusClass = data.status === 'healthy' ? 'status-success' : 'status-error';
-            
-            const header = document.createElement('div');
-            header.className = `status-panel ${statusClass}`;
-            header.innerHTML = `<strong>Health Status:</strong> ${data.status}`;
-            container.appendChild(header);
-            
-            // Use the provided timestamp if available
-            const timeElement = document.createElement('div');
-            timeElement.className = 'message-time';
-            const date = data.timestamp ? new Date(data.timestamp * 1000) : new Date();
-            timeElement.textContent = `Checked: ${date.toLocaleString()}`;
-            container.appendChild(timeElement);
-            
-            // Display system metrics
-            if (data.active_connections !== undefined) {
-                const connectionsEl = document.createElement('div');
-                connectionsEl.innerHTML = `<strong>Active Connections:</strong> ${data.active_connections}`;
-                container.appendChild(connectionsEl);
-            }
-            
-            if (data.job_statuses !== undefined) {
-                const jobsEl = document.createElement('div');
-                jobsEl.innerHTML = `<strong>Tracked Jobs:</strong> ${data.job_statuses}`;
-                container.appendChild(jobsEl);
-            }
-            
-            if (data.namespace) {
-                const namespaceEl = document.createElement('div');
-                namespaceEl.innerHTML = `<strong>Namespace:</strong> ${data.namespace}`;
-                container.appendChild(namespaceEl);
-            }
-            
-            if (data.watch_connections !== undefined) {
-                const watchEl = document.createElement('div');
-                watchEl.innerHTML = `<strong>Watch Connections:</strong> ${data.watch_connections}`;
-                container.appendChild(watchEl);
-            }
-            
-            // Add all data as details
-            const detailsEl = document.createElement('div');
-            detailsEl.innerHTML = `<strong>Details:</strong>`;
-            container.appendChild(detailsEl);
-            
-            const detailsCode = document.createElement('pre');
-            detailsCode.className = 'code-block';
-            detailsCode.textContent = JSON.stringify(data, null, 2);
-            container.appendChild(detailsCode);
-            
-            return container;
+        // Add processing time if available
+        if (data.total_time !== undefined) {
+          const timeInfo = document.createElement("div");
+          timeInfo.innerHTML = `<strong>Processing time:</strong> ${data.total_time.toFixed(
+            2
+          )}s`;
+          container.appendChild(timeInfo);
         }
 
-        document.getElementById("status-job").addEventListener("click", async () => {
-            try {
-                if (!currentJob || !currentJob.job_name) {
-                    document.getElementById("status_get").innerHTML = "<p>No active job to check status for</p>";
-                    return;
-                }
-                
-                const response = await fetch(`${API_BASE_URL}${PREFIX}/job-status/${currentJob.job_name}`, { 
-                    method: "GET",
-                    headers: {
-                        "Content-Type": "application/json"
-                    }
-                });
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP error! Status: ${response.status}`);
-                }
-                
-                const data = await response.json();
-                console.log(data);
-                
-                const statusGet = document.getElementById("status_get");
-                statusGet.innerHTML = "";
-                statusGet.appendChild(formatJsonMessage(data));
-                
-            } catch (error) {
-                document.getElementById("status_get").innerHTML = `<p>Error: ${error.message}</p>`;
-                console.error("Error getting job status:", error);
-            }
-        });
-
-        document.getElementById("check-health").addEventListener("click", async () => {
-            try {
-                // Clear previous health status
-                document.getElementById("health_status").innerHTML = "<p>Checking API health...</p>";
-                
-                // Connect to health WebSocket
-                const response =  await fetch(`${API_BASE_URL}${PREFIX}/ws/health`);
-                
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! Status: ${response.status}`);
-                }
-
-                const data = await response.json();
-                try {
-                        // const data = JSON.parse(event.data);
-                        console.log("Received health data:", data);
-                        
-                        const healthStatus = document.getElementById('health_status');
-                        healthStatus.innerHTML = '';
-                        healthStatus.appendChild(formatHealthData(data));
-                    } catch (error) {
-                        const healthStatus = document.getElementById('health_status');
-                        const errorMsg = document.createElement('p');
-                        errorMsg.textContent = `Error parsing health data: ${error.message}`;
-                        healthStatus.appendChild(errorMsg);
-                        console.error("WebSocket health data parse error:", error);
-                    }
-                
-            } catch (error) {
-                document.getElementById("health_status").innerHTML = `<p>Error: ${error.message}</p>`;
-                console.error("Error checking health:", error);
-            }
-        });
-
-        document.getElementById("start-job").addEventListener("click", async () => {
-            try {
-                // Clear previous status
-                document.getElementById("status").innerHTML = "<p>Starting job...</p>";
-                document.getElementById("download-link").style.display = "none";
-                
-                // Get values from form
-                const filePath = document.getElementById("file_path").value.trim();
-                if (!filePath) {
-                    throw new Error("File path is required");
-                }
-                
-                // Build request body object with all parameters
-                const requestBody = {
-                    file_path: filePath,
-                    format: document.getElementById("format").value,
-                    outcrs: document.getElementById("outcrs").value,
-                };
-                
-                // Add optional parameters only if they have values
-                const incrs = document.getElementById("incrs").value.trim();
-                if (incrs) requestBody.incrs = incrs;
-                
-                const line = parseInt(document.getElementById("line").value);
-                if (!isNaN(line)) requestBody.line = line;
-                
-                const returns = parseInt(document.getElementById("returns").value);
-                if (!isNaN(returns)) requestBody.returns = returns;
-                
-                const number = parseInt(document.getElementById("number").value);
-                if (!isNaN(number)) requestBody.number = number;
-                
-                const density = parseFloat(document.getElementById("density").value);
-                if (!isNaN(density)) requestBody.density = density;
-                
-                const roi = document.getElementById("roi").value.trim();
-                if (roi) requestBody.roi = roi;
-                
-                // Handle remove_attribute (support for multiple attributes as comma-separated list)
-                const removeAttr = document.getElementById("remove_attribute").value.trim();
-                if (removeAttr) {
-                    const attrs = removeAttr.split(',').map(attr => attr.trim()).filter(attr => attr);
-                    if (attrs.length === 1) {
-                        requestBody.remove_attribute = attrs[0];
-                    } else if (attrs.length > 1) {
-                        requestBody.remove_attribute = attrs;
-                    }
-                }
-                
-                // Add checkbox values
-                if (document.getElementById("remove_all_attributes").checked) {
-                    requestBody.remove_all_attributes = true;
-                }
-                
-                if (document.getElementById("remove_color").checked) {
-                    requestBody.remove_color = true;
-                }
-                
-                console.log("Sending request with body:", requestBody);
-                
-                const response = await fetch(`${API_BASE_URL}${PREFIX}/start-job/`, { 
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify(requestBody)
-                });
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP error! Status: ${response.status}`);
-                }
-                
-                currentJob = await response.json();
-                
-                if (currentJob.job_name) {
-                    const statusEl = document.getElementById("status");
-                    statusEl.innerHTML = "";
-                    
-                    const startMsg = {
-                        job_name: currentJob.job_name,
-                        status: "Started",
-                        message: `Job ${currentJob.job_name} has been started`,
-                        timestamp: new Date().toISOString()
-                    };
-                    
-                    statusEl.appendChild(formatJsonMessage(startMsg));
-                    listenForUpdates(currentJob.job_name);
-                } else {
-                    document.getElementById("status").innerHTML = "<p>Failed to start job.</p>";
-                }
-            } catch (error) {
-                document.getElementById("status").innerHTML = `<p>Error: ${error.message}</p>`;
-                console.error("Error starting job:", error);
-            }
-        });
-
-        document.getElementById("stop-job").addEventListener("click", async () => {
-            try {
-                if (!currentJob || !currentJob.job_name) {
-                    document.getElementById("status").innerHTML = "<p>No active job to stop</p>";
-                    return;
-                }
-
-                const response = await fetch(`${API_BASE_URL}${PREFIX}/stop-job/${currentJob.job_name}`, { 
-                    method: "DELETE",
-                    headers: {
-                        "Content-Type": "application/json"
-                    }
-                });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! Status: ${response.status}`);
-                }
-
-                const data = await response.json();
-                const statusEl = document.getElementById("status");
-                
-                const stopMsg = {
-                    job_name: currentJob.job_name,
-                    status: "Stopped",
-                    message: `Job ${currentJob.job_name} has been stopped`,
-                    timestamp: new Date().toISOString()
-                };
-                
-                statusEl.innerHTML = "";
-                statusEl.appendChild(formatJsonMessage(stopMsg));
-                
-                currentJob = null; // Reset current job
-
-            } catch (error) {
-                document.getElementById("status").innerHTML = `<p>Error: ${error.message}</p>`;
-                console.error("Error stopping job:", error);
-            }
-        });
-
-        function listenForUpdates(jobName) {
-            const ws = new WebSocket(`${WS_BASE_URL}${PREFIX}/ws/job-status/${jobName}`);
- 
-            ws.onopen = () => {
-                const statusEl = document.getElementById('status');
-                const wsMsg = document.createElement('p');
-                wsMsg.textContent = 'WebSocket connection established';
-                statusEl.appendChild(wsMsg);
-            };
-            
-            ws.onmessage = (event) => {
-                try {
-                    const data = JSON.parse(event.data);
-                    console.log("Received message data:", data);
-                    
-                    const statusEl = document.getElementById('status');
-                    
-                    // Create the formatted JSON display
-                    const formattedMsg = formatJsonMessage(data);
-                    statusEl.appendChild(formattedMsg);
-                    
-                    // Auto-scroll to the bottom to show the latest message
-                    statusEl.scrollTop = statusEl.scrollHeight;
-
-                    // Check for completion in the parsed data object
-                    if (data.status === "Complete" || data.status === "SuccessCriteriaMet") {
-                        const downloadLink = document.getElementById("download-link");
-                        downloadLink.href = `${API_BASE_URL}${PREFIX}/download/${jobName}`;
-                        downloadLink.style.display = "block";
-                        downloadLink.innerText = "Download Processed File";
-                    }
-                } catch (error) {
-                    const statusEl = document.getElementById('status');
-                    const errorMsg = document.createElement('p');
-                    errorMsg.textContent = `Error parsing message: ${error.message}`;
-                    statusEl.appendChild(errorMsg);
-                    console.error("WebSocket message parse error:", error);
-                }
-            };
-
-            ws.onerror = (error) => {
-                const statusEl = document.getElementById('status');
-                const errorMsg = document.createElement('p');
-                errorMsg.textContent = 'WebSocket Error';
-                statusEl.appendChild(errorMsg);
-                console.error('WebSocket error:', error);
-            };
-            
-            ws.onclose = (event) => {
-                const statusEl = document.getElementById('status');
-                const closeMsg = document.createElement('p');
-                closeMsg.textContent = `WebSocket connection closed (Code: ${event.code})`;
-                statusEl.appendChild(closeMsg);
-            };
+        // Add message if available
+        if (data.message) {
+          const messageEl = document.createElement("div");
+          messageEl.innerHTML = `<strong>Message:</strong> ${data.message}`;
+          container.appendChild(messageEl);
         }
+
+        // Add CLI args if available
+        if (data.cli_args && data.cli_args.length > 0) {
+          const argsEl = document.createElement("div");
+          argsEl.innerHTML = `<strong>Command:</strong>`;
+          const codeEl = document.createElement("div");
+          codeEl.className = "code-block";
+          codeEl.textContent = data.cli_args.join(" ");
+          argsEl.appendChild(codeEl);
+          container.appendChild(argsEl);
+        }
+
+        // Add output path if available
+        if (data.output_path) {
+          const outputEl = document.createElement("div");
+          outputEl.innerHTML = `<strong>Output:</strong> ${data.output_path}`;
+          container.appendChild(outputEl);
+        }
+
+        // Add logs if available
+        if (data.logs) {
+          const logsTitle = document.createElement("div");
+          logsTitle.innerHTML = `<strong>Logs:</strong>`;
+          container.appendChild(logsTitle);
+
+          const logsEl = document.createElement("div");
+          logsEl.className = "code-block";
+          logsEl.textContent = data.logs;
+          container.appendChild(logsEl);
+        }
+
+        return container;
+      }
+
+      // Function to format health data
+      function formatHealthData(data) {
+        const container = document.createElement("div");
+        container.className = "json-container";
+
+        const statusClass =
+          data.status === "healthy" ? "status-success" : "status-error";
+
+        const header = document.createElement("div");
+        header.className = `status-panel ${statusClass}`;
+        header.innerHTML = `<strong>Health Status:</strong> ${data.status}`;
+        container.appendChild(header);
+
+        // Use the provided timestamp if available
+        const timeElement = document.createElement("div");
+        timeElement.className = "message-time";
+        const date = data.timestamp
+          ? new Date(data.timestamp * 1000)
+          : new Date();
+        timeElement.textContent = `Checked: ${date.toLocaleString()}`;
+        container.appendChild(timeElement);
+
+        // Display system metrics
+        if (data.active_connections !== undefined) {
+          const connectionsEl = document.createElement("div");
+          connectionsEl.innerHTML = `<strong>Active Connections:</strong> ${data.active_connections}`;
+          container.appendChild(connectionsEl);
+        }
+
+        if (data.job_statuses !== undefined) {
+          const jobsEl = document.createElement("div");
+          jobsEl.innerHTML = `<strong>Tracked Jobs:</strong> ${data.job_statuses}`;
+          container.appendChild(jobsEl);
+        }
+
+        if (data.namespace) {
+          const namespaceEl = document.createElement("div");
+          namespaceEl.innerHTML = `<strong>Namespace:</strong> ${data.namespace}`;
+          container.appendChild(namespaceEl);
+        }
+
+        if (data.watch_connections !== undefined) {
+          const watchEl = document.createElement("div");
+          watchEl.innerHTML = `<strong>Watch Connections:</strong> ${data.watch_connections}`;
+          container.appendChild(watchEl);
+        }
+
+        // Add all data as details
+        const detailsEl = document.createElement("div");
+        detailsEl.innerHTML = `<strong>Details:</strong>`;
+        container.appendChild(detailsEl);
+
+        const detailsCode = document.createElement("pre");
+        detailsCode.className = "code-block";
+        detailsCode.textContent = JSON.stringify(data, null, 2);
+        container.appendChild(detailsCode);
+
+        return container;
+      }
+
+      document
+        .getElementById("status-job")
+        .addEventListener("click", async () => {
+          try {
+            if (!currentJob || !currentJob.job_name) {
+              document.getElementById("status_get").innerHTML =
+                "<p>No active job to check status for</p>";
+              return;
+            }
+
+            const response = await fetch(
+              `${API_BASE_URL}${PREFIX}/job-status/${currentJob.job_name}`,
+              {
+                method: "GET",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+              }
+            );
+
+            if (!response.ok) {
+              throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            console.log(data);
+
+            const statusGet = document.getElementById("status_get");
+            statusGet.innerHTML = "";
+            statusGet.appendChild(formatJsonMessage(data));
+          } catch (error) {
+            document.getElementById(
+              "status_get"
+            ).innerHTML = `<p>Error: ${error.message}</p>`;
+            console.error("Error getting job status:", error);
+          }
+        });
+
+      document
+        .getElementById("check-health")
+        .addEventListener("click", async () => {
+          try {
+            // Clear previous health status
+            document.getElementById("health_status").innerHTML =
+              "<p>Checking API health...</p>";
+
+            // Connect to health WebSocket
+            const response = await fetch(`${API_BASE_URL}${PREFIX}/ws/health`);
+
+            if (!response.ok) {
+              throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            try {
+              // const data = JSON.parse(event.data);
+              console.log("Received health data:", data);
+
+              const healthStatus = document.getElementById("health_status");
+              healthStatus.innerHTML = "";
+              healthStatus.appendChild(formatHealthData(data));
+            } catch (error) {
+              const healthStatus = document.getElementById("health_status");
+              const errorMsg = document.createElement("p");
+              errorMsg.textContent = `Error parsing health data: ${error.message}`;
+              healthStatus.appendChild(errorMsg);
+              console.error("WebSocket health data parse error:", error);
+            }
+          } catch (error) {
+            document.getElementById(
+              "health_status"
+            ).innerHTML = `<p>Error: ${error.message}</p>`;
+            console.error("Error checking health:", error);
+          }
+        });
+
+      document
+        .getElementById("start-job")
+        .addEventListener("click", async () => {
+          try {
+            // Clear previous status
+            document.getElementById("status").innerHTML =
+              "<p>Starting job...</p>";
+            document.getElementById("download-link").style.display = "none";
+
+            // Get values from form
+            const filePath = document.getElementById("file_path").value.trim();
+            if (!filePath) {
+              throw new Error("File path is required");
+            }
+
+            // Build request body object with all parameters
+            const requestBody = {
+              file_path: filePath,
+              format: document.getElementById("format").value,
+              outcrs: document.getElementById("outcrs").value,
+            };
+
+            // Add optional parameters only if they have values
+            const incrs = document.getElementById("incrs").value.trim();
+            if (incrs) requestBody.incrs = incrs;
+
+            const line = parseInt(document.getElementById("line").value);
+            if (!isNaN(line)) requestBody.line = line;
+
+            const returns = parseInt(document.getElementById("returns").value);
+            if (!isNaN(returns)) requestBody.returns = returns;
+
+            const number = parseInt(document.getElementById("number").value);
+            if (!isNaN(number)) requestBody.number = number;
+
+            const density = parseFloat(
+              document.getElementById("density").value
+            );
+            if (!isNaN(density)) requestBody.density = density;
+
+            const roi = document.getElementById("roi").value.trim();
+            if (roi) requestBody.roi = roi;
+
+            // Handle remove_attribute (support for multiple attributes as comma-separated list)
+            const removeAttr = document
+              .getElementById("remove_attribute")
+              .value.trim();
+            if (removeAttr) {
+              const attrs = removeAttr
+                .split(",")
+                .map((attr) => attr.trim())
+                .filter((attr) => attr);
+              if (attrs.length === 1) {
+                requestBody.remove_attribute = attrs[0];
+              } else if (attrs.length > 1) {
+                requestBody.remove_attribute = attrs;
+              }
+            }
+
+            // Add checkbox values
+            if (document.getElementById("remove_all_attributes").checked) {
+              requestBody.remove_all_attributes = true;
+            }
+
+            if (document.getElementById("remove_color").checked) {
+              requestBody.remove_color = true;
+            }
+
+            console.log("Sending request with body:", requestBody);
+
+            const response = await fetch(
+              `${API_BASE_URL}${PREFIX}/start-job/`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify(requestBody),
+              }
+            );
+
+            if (!response.ok) {
+              throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+
+            currentJob = await response.json();
+
+            if (currentJob.job_name) {
+              const statusEl = document.getElementById("status");
+              statusEl.innerHTML = "";
+
+              const startMsg = {
+                job_name: currentJob.job_name,
+                status: "Started",
+                message: `Job ${currentJob.job_name} has been started`,
+                timestamp: new Date().toISOString(),
+              };
+
+              statusEl.appendChild(formatJsonMessage(startMsg));
+              listenForUpdates(currentJob.job_name);
+            } else {
+              document.getElementById("status").innerHTML =
+                "<p>Failed to start job.</p>";
+            }
+          } catch (error) {
+            document.getElementById(
+              "status"
+            ).innerHTML = `<p>Error: ${error.message}</p>`;
+            console.error("Error starting job:", error);
+          }
+        });
+
+      document
+        .getElementById("stop-job")
+        .addEventListener("click", async () => {
+          try {
+            if (!currentJob || !currentJob.job_name) {
+              document.getElementById("status").innerHTML =
+                "<p>No active job to stop</p>";
+              return;
+            }
+
+            const response = await fetch(
+              `${API_BASE_URL}${PREFIX}/stop-job/${currentJob.job_name}`,
+              {
+                method: "DELETE",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+              }
+            );
+
+            if (!response.ok) {
+              throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            const statusEl = document.getElementById("status");
+
+            const stopMsg = {
+              job_name: currentJob.job_name,
+              status: "Stopped",
+              message: `Job ${currentJob.job_name} has been stopped`,
+              timestamp: new Date().toISOString(),
+            };
+
+            statusEl.innerHTML = "";
+            statusEl.appendChild(formatJsonMessage(stopMsg));
+
+            currentJob = null; // Reset current job
+          } catch (error) {
+            document.getElementById(
+              "status"
+            ).innerHTML = `<p>Error: ${error.message}</p>`;
+            console.error("Error stopping job:", error);
+          }
+        });
+
+      function listenForUpdates(jobName) {
+        const ws = new WebSocket(
+          `${WS_BASE_URL}${PREFIX}/ws/job-status/${jobName}`
+        );
+
+        ws.onopen = () => {
+          const statusEl = document.getElementById("status");
+          const wsMsg = document.createElement("p");
+          wsMsg.textContent = "WebSocket connection established";
+          statusEl.appendChild(wsMsg);
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            console.log("Received message data:", data);
+
+            const statusEl = document.getElementById("status");
+
+            // Create the formatted JSON display
+            const formattedMsg = formatJsonMessage(data);
+            statusEl.appendChild(formattedMsg);
+
+            // Auto-scroll to the bottom to show the latest message
+            statusEl.scrollTop = statusEl.scrollHeight;
+
+            // Check for completion in the parsed data object
+            if (
+              data.status === "Complete" ||
+              data.status === "SuccessCriteriaMet"
+            ) {
+              const downloadLink = document.getElementById("download-link");
+              downloadLink.href = `${API_BASE_URL}${PREFIX}/download/${jobName}`;
+              downloadLink.style.display = "block";
+              downloadLink.innerText = "Download Processed File";
+            }
+          } catch (error) {
+            const statusEl = document.getElementById("status");
+            const errorMsg = document.createElement("p");
+            errorMsg.textContent = `Error parsing message: ${error.message}`;
+            statusEl.appendChild(errorMsg);
+            console.error("WebSocket message parse error:", error);
+          }
+        };
+
+        ws.onerror = (error) => {
+          const statusEl = document.getElementById("status");
+          const errorMsg = document.createElement("p");
+          errorMsg.textContent = "WebSocket Error";
+          statusEl.appendChild(errorMsg);
+          console.error("WebSocket error:", error);
+        };
+
+        ws.onclose = (event) => {
+          const statusEl = document.getElementById("status");
+          const closeMsg = document.createElement("p");
+          closeMsg.textContent = `WebSocket connection closed (Code: ${event.code})`;
+          statusEl.appendChild(closeMsg);
+        };
+      }
     </script>
-</body>
+  </body>
 </html>
