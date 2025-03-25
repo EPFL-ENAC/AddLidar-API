@@ -2,6 +2,7 @@ Add some persistence for the job, by using redis
 
 Add more tests
 
+- Add release-please token
 - Better status for job/pod monitoring
 - We should probably have a backgroundTask that check the inMemory status of jobs and delete the unecessary one
 
