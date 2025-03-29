@@ -5,7 +5,7 @@ import logging
 import asyncio
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Tuple, Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any
 from src.config.settings import settings
 
 # from src.services.job_status import job_status_manager
@@ -484,12 +484,12 @@ def generate_k8s_addlidarmanager_job(
         volume_mounts=volume_mounts,
         resources=client.V1ResourceRequirements(
             requests={
-                "cpu": "1000m",  # Request 1 CPU cores
+                "cpu": "500m",  # Request 1 CPU cores
                 "memory": "128Mi",  # Request 128 MiB memory
             },
             limits={
                 "cpu": "1000m",  # limits 1 CPU cores max
-                "memory": "512Mi",  # limits 512 MiB memory
+                "memory": "256Mi",  # limits 512 MiB memory
             },
         ),
     )
