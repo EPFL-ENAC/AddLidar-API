@@ -33,3 +33,9 @@ dist/
 
 # Environments
 .env
+
+
+
+lidar-zip/lidar/*
+lidar-zip/zips/*
+lidar-zip/temp/*
