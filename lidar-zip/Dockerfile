@@ -1,17 +1,14 @@
 FROM debian:bookworm-slim
 
-# Install required packages
-RUN apt update && apt install -y \
+# Install base dependencies including pigz
+RUN apt-get update && apt-get install -y \
     tar \
     bash \
     findutils \
     coreutils \
-    curl 
-
-# Download and install crabz from the release
-RUN curl -LO https://github.com/sstadick/crabz/releases/download/v0.10.0/crabz-linux-amd64.deb \
-    && dpkg -i crabz-linux-amd64.deb || apt-get -f install -y \
-    && rm crabz-linux-amd64.deb
+    gawk \
+    pigz \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy the archive script
 COPY archive_folders.sh /usr/local/bin/
