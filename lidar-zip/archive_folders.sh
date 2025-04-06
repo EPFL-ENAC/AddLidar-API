@@ -34,6 +34,38 @@ calculate_speed() {
   awk "BEGIN {printf \"%.2f\", $1 / 1048576 / $2}"
 }
 
+
+get_pigz_threads() {
+  if command -v pgrep >/dev/null 2>&1; then
+    # Find the main pigz process
+    pigz_main_pid=$(pgrep "pigz" | head -n 1)
+    if [ -n "$pigz_main_pid" ]; then
+      # Count actual threads if we can access /proc
+      if [ -d "/proc/$pigz_main_pid/task" ]; then
+        ls -1 /proc/$pigz_main_pid/task | wc -l
+        return
+      else
+        # Fallback to checking if the -p parameter is working
+        pigz_command=$(ps -o command= -p $pigz_main_pid 2>/dev/null || echo "")
+        if [[ "$pigz_command" == *"-p 8"* ]]; then
+          echo "8"
+          return
+        fi
+      fi
+    fi
+  else
+    # Use ps for systems without pgrep
+    pigz_pid=$(ps aux | grep -v grep | grep "pigz" | awk '{print $2}' | head -n 1)
+    if [ -n "$pigz_pid" ] && [ -d "/proc/$pigz_pid/task" ]; then
+      ls -1 /proc/$pigz_pid/task | wc -l
+      return
+    fi
+  fi
+  
+  # Default fallback
+  echo "1"
+}
+
 monitor_progress() {
   local pid=$1
   local original_size=$2
@@ -59,17 +91,25 @@ monitor_progress() {
         if [ "$size_diff" -gt 0 ]; then
           current_speed=$(calculate_speed $size_diff $time_diff)
           
+          pigz_processes=$(get_pigz_threads)
+
           # Calculate ETA
           remaining_bytes=$((original_size - current_size))
           if [ "$size_diff" -gt 0 ]; then
             eta_seconds=$(awk "BEGIN {printf \"%.0f\", $remaining_bytes / ($size_diff / $time_diff)}")
             eta_human=$(date -d@$eta_seconds -u +%H:%M:%S)
-            log "   Progress: $current_size_human / $progress% complete - Speed: ${current_speed} MB/s - ETA: ${eta_human}"
+            log "   Progress: $current_size_human / $progress% complete - Speed: ${current_speed} MB/s - Threads: ${pigz_processes} - ETA: ${eta_human}"
           else
-            log "   Progress: $current_size_human / $progress% complete"
+            log "   Progress: $current_size_human / $progress% complete - Threads: ${pigz_processes}"
           fi
         else
-          log "   Progress: $current_size_human / $progress% complete"
+          # Still show thread count even if speed can't be calculated
+          if command -v pgrep >/dev/null 2>&1; then
+            pigz_processes=$(pgrep -c "pigz" || echo 1)
+          else
+            pigz_processes=$(ps aux | grep -v grep | grep -c pigz || echo 1)
+          fi
+          log "   Progress: $current_size_human / $progress% complete - Threads: ${pigz_processes}"
         fi
         
         # Update previous values for next iteration
@@ -126,12 +166,12 @@ find "$SOURCE_DIR" -mindepth 1 -maxdepth 1 -type d | while read -r first_dir; do
       # Use pv to show progress
       tar -cf - -C "$(dirname "$second_dir")" "$(basename "$second_dir")" 2>/dev/null | 
         pv -s "$original_size" | 
-        pigz -1 -p 4 > "$archive_path"
+        pigz -1 --verbose  > "$archive_path"
       compression_status=$?
     else
       # Start compression in background
       tar -cf - -C "$(dirname "$second_dir")" "$(basename "$second_dir")" 2>/dev/null | 
-        pigz -1 -p 4 > "$archive_path" &
+        pigz -1 --verbose  > "$archive_path" &
       pigz_pid=$!
       
       # Monitor progress
