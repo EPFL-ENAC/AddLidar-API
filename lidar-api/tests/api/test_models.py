@@ -5,8 +5,8 @@ from src.api.models import PointCloudRequest
 
 def mock_file_is_file(self):
     valid_paths = [
-        "/data/LiDAR/0001_Mission_Root/TEST_GENERATED/all_grouped_high_veg_10th_point.las",
-        "/data/LiDar/test.las",
+        "/data/0001_Mission_Root/TEST_GENERATED/all_grouped_high_veg_10th_point.las",
+        "/data/test.las",
     ]
     path_str = str(self)
     return path_str in valid_paths or path_str.replace("\\", "/") in valid_paths
@@ -22,11 +22,10 @@ def test_file_path_validator():
     """Test the file path validator with various inputs"""
     # Test valid absolute path
     absolute_path = Path(
-        "/LiDAR/0001_Mission_Root/TEST_GENERATED/all_grouped_high_veg_10th_point.las"
+        "/0001_Mission_Root/TEST_GENERATED/all_grouped_high_veg_10th_point.las"
     )
     valid_path = Path(
-        "/data/LiDAR/0001_Mission_Root/TEST_GENERATED/all_grouped_high_veg_10th_point.las"
+        "/data/0001_Mission_Root/TEST_GENERATED/all_grouped_high_veg_10th_point.las"
     )
     request = PointCloudRequest(file_path=absolute_path)
     assert request.file_path == valid_path
-
