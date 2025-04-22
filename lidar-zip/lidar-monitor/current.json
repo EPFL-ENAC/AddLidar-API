@@ -1,0 +1,177 @@
+[
+  {
+    "path": "./lidar/0001_Mission_Root",
+    "size_kb": 9212,
+    "mod_time": "2025-04-21 14:48:36",
+    "mod_time_epoch": 1745239716,
+    "file_count": 1
+  },
+  {
+    "path": "./lidar/0001_Mission_Root/00_Raw_Lidar_SDC_Data",
+    "size_kb": 4,
+    "mod_time": "2025-03-30 01:32:27",
+    "mod_time_epoch": 1743294747,
+    "file_count": 0
+  },
+  {
+    "path": "./lidar/0001_Mission_Root/011_lidar_mounting-info",
+    "size_kb": 9176,
+    "mod_time": "2025-04-21 14:49:15",
+    "mod_time_epoch": 1745239755,
+    "file_count": 1
+  },
+  {
+    "path": "./lidar/0001_Mission_Root/01_lidar_mounting_info",
+    "size_kb": 4,
+    "mod_time": "2025-03-30 01:32:27",
+    "mod_time_epoch": 1743294747,
+    "file_count": 0
+  },
+  {
+    "path": "./lidar/0001_Mission_Root/02_LAS_PCD",
+    "size_kb": 4,
+    "mod_time": "2025-03-30 01:32:27",
+    "mod_time_epoch": 1743294747,
+    "file_count": 0
+  },
+  {
+    "path": "./lidar/0001_Mission_Root/03_Classified_Colorized Point Index",
+    "size_kb": 4,
+    "mod_time": "2025-03-30 01:32:27",
+    "mod_time_epoch": 1743294747,
+    "file_count": 0
+  },
+  {
+    "path": "./lidar/0001_Mission_Root/04_Segmentation_Classification_Point_Index",
+    "size_kb": 4,
+    "mod_time": "2025-03-30 01:32:27",
+    "mod_time_epoch": 1743294747,
+    "file_count": 0
+  },
+  {
+    "path": "./lidar/0001_Mission_Root/05_GNSS_INS_Data",
+    "size_kb": 4,
+    "mod_time": "2025-04-22 10:35:51",
+    "mod_time_epoch": 1745310951,
+    "file_count": 0
+  },
+  {
+    "path": "./lidar/0001_Mission_Root/06_RGB_Images",
+    "size_kb": 4,
+    "mod_time": "2025-03-30 01:32:27",
+    "mod_time_epoch": 1743294747,
+    "file_count": 0
+  },
+  {
+    "path": "./lidar/0001_Mission_Root/07_Orthophotos",
+    "size_kb": 4,
+    "mod_time": "2025-03-30 01:32:27",
+    "mod_time_epoch": 1743294747,
+    "file_count": 0
+  },
+  {
+    "path": "./lidar/0002_Val_dArpette",
+    "size_kb": 44,
+    "mod_time": "2025-03-30 01:32:27",
+    "mod_time_epoch": 1743294747,
+    "file_count": 2
+  },
+  {
+    "path": "./lidar/0002_Val_dArpette/00_Raw_Lidar_SDC_Data",
+    "size_kb": 16,
+    "mod_time": "2025-03-30 01:32:27",
+    "mod_time_epoch": 1743294747,
+    "file_count": 0
+  },
+  {
+    "path": "./lidar/0002_Val_dArpette/01_lidar_mounting_info",
+    "size_kb": 8,
+    "mod_time": "2025-03-30 01:33:37",
+    "mod_time_epoch": 1743294817,
+    "file_count": 1
+  },
+  {
+    "path": "./lidar/0002_Val_dArpette/01_Point_Cloud",
+    "size_kb": 4,
+    "mod_time": "2025-03-30 01:32:27",
+    "mod_time_epoch": 1743294747,
+    "file_count": 0
+  },
+  {
+    "path": "./lidar/0002_Val_dArpette/02_RAW_LAZ",
+    "size_kb": 8,
+    "mod_time": "2025-03-30 01:33:38",
+    "mod_time_epoch": 1743294818,
+    "file_count": 1
+  },
+  {
+    "path": "./lidar/0002_Val_dArpette/09_LAZ_FootPrints",
+    "size_kb": 4,
+    "mod_time": "2025-03-30 01:32:27",
+    "mod_time_epoch": 1743294747,
+    "file_count": 0
+  },
+  {
+    "path": "./lidar/0003_EPFL",
+    "size_kb": 15085148,
+    "mod_time": "2025-04-06 14:37:53",
+    "mod_time_epoch": 1743943073,
+    "file_count": 113
+  },
+  {
+    "path": "./lidar/0003_EPFL/00_3_Raw_Lidar",
+    "size_kb": 1713476,
+    "mod_time": "2025-03-18 13:53:02",
+    "mod_time_epoch": 1742302382,
+    "file_count": 6
+  },
+  {
+    "path": "./lidar/0003_EPFL/01_Lidar",
+    "size_kb": 2622640,
+    "mod_time": "2025-04-06 17:07:46",
+    "mod_time_epoch": 1743952066,
+    "file_count": 39
+  },
+  {
+    "path": "./lidar/0003_EPFL/02_Camera",
+    "size_kb": 52,
+    "mod_time": "2025-04-06 14:39:01",
+    "mod_time_epoch": 1743943141,
+    "file_count": 1
+  },
+  {
+    "path": "./lidar/0003_EPFL/03_Orthophoto",
+    "size_kb": 9278552,
+    "mod_time": "2025-03-30 22:44:16",
+    "mod_time_epoch": 1743367456,
+    "file_count": 29
+  },
+  {
+    "path": "./lidar/0003_EPFL/04_GNSS_INS_Data",
+    "size_kb": 60,
+    "mod_time": "2025-03-30 01:32:27",
+    "mod_time_epoch": 1743294747,
+    "file_count": 0
+  },
+  {
+    "path": "./lidar/0003_EPFL/05_Metafile_Additional_Attributes",
+    "size_kb": 4,
+    "mod_time": "2025-03-30 01:32:27",
+    "mod_time_epoch": 1743294747,
+    "file_count": 0
+  },
+  {
+    "path": "./lidar/0003_EPFL/06_Metafile_Indexes",
+    "size_kb": 4,
+    "mod_time": "2025-03-30 01:32:27",
+    "mod_time_epoch": 1743294747,
+    "file_count": 0
+  },
+  {
+    "path": "./lidar/0003_EPFL/09_Test",
+    "size_kb": 19320,
+    "mod_time": "2025-03-30 01:33:29",
+    "mod_time_epoch": 1743294809,
+    "file_count": 37
+  }
+]
