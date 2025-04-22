@@ -166,12 +166,12 @@ find "$SOURCE_DIR" -mindepth 1 -maxdepth 1 -type d | while read -r first_dir; do
       # Use pv to show progress
       tar -cf - -C "$(dirname "$second_dir")" "$(basename "$second_dir")" 2>/dev/null | 
         pv -s "$original_size" | 
-        pigz --verbose  > "$archive_path"
+        pigz - --verbose --blocksize 2048  > "$archive_path"
       compression_status=$?
     else
       # Start compression in background
       tar -cf - -C "$(dirname "$second_dir")" "$(basename "$second_dir")" 2>/dev/null | 
-        pigz --verbose  > "$archive_path" &
+        pigz --verbose --blocksize 2048  > "$archive_path" &
       pigz_pid=$!
       
       # Monitor progress
