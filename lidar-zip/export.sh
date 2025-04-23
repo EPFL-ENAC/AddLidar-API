@@ -12,3 +12,5 @@ SELECT
 FROM   folder_state
 ORDER  BY last_seen DESC;
 "  > state.json
+
+

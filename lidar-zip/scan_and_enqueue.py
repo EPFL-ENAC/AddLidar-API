@@ -114,7 +114,24 @@ def queue_zip_job_on_kube(rel_path: str) -> None:
     name = f"zip-{uuid.uuid4().hex[:10]}"
     
     try:
-        # Create Kubernetes job specification
+        # Create Kubernetes job specification with a post-completion script to update the database
+        archive_script = (
+            f"mkdir -p $(dirname '{full_dest}') && "
+            f"tar -C '{ORIG}/{os.path.dirname(rel_path)}' "
+            f"--use-compress-program=pigz -cf '{full_dest}' "
+            f"'{os.path.basename(rel_path)}' && "
+            f"echo 'Archive created successfully: {full_dest}' && "
+            # Add database update command after successful archive creation
+            f"python3 -c \"import sqlite3, time; "
+            f"db = sqlite3.connect('{DB}'); "
+            f"db.execute('UPDATE folder_state SET archived_at = ? WHERE folder_key = ?', "
+            f"(int(time.time()), '{rel_path}')); "
+            f"db.commit(); "
+            f"db.close(); "
+            f"print('Database updated for {rel_path}')\" || "
+            f"echo 'Failed to update database for {rel_path}'"
+        )
+        
         job = client.V1Job(
             metadata=client.V1ObjectMeta(name=name),
             spec=client.V1JobSpec(
@@ -123,21 +140,18 @@ def queue_zip_job_on_kube(rel_path: str) -> None:
                         restart_policy="Never",
                         containers=[client.V1Container(
                             name="zip",
-                            image="alpine:3.18",  # Updated Alpine version for stability
-                            command=["/bin/sh", "-c",
-                                f"mkdir -p $(dirname '{full_dest}') && "
-                                f"tar -C '{ORIG}/{os.path.dirname(rel_path)}' "
-                                f"--use-compress-program=pigz -cf '{full_dest}' "
-                                f"'{os.path.basename(rel_path)}'"
-                            ],
+                            image="python:3.9-alpine",  # Using Python image to enable database update
+                            command=["/bin/sh", "-c", archive_script],
                             volume_mounts=[
                                 client.V1VolumeMount(mount_path=ORIG, name="orig", read_only=True),
                                 client.V1VolumeMount(mount_path=ZIP, name="zip"),
+                                client.V1VolumeMount(mount_path=os.path.dirname(DB), name="db"),
                             ]
                         )],
                         volumes=[
                             client.V1Volume(name="orig", host_path=client.V1HostPathVolumeSource(path=ORIG)),
                             client.V1Volume(name="zip", host_path=client.V1HostPathVolumeSource(path=ZIP)),
+                            client.V1Volume(name="db", host_path=client.V1HostPathVolumeSource(path=os.path.dirname(DB))),
                         ]
                     )
                 )
@@ -167,19 +181,30 @@ def queue_zip_job_on_docker(rel_path: str) -> None:
         # Create directory for the archive if it doesn't exist
         os.makedirs(os.path.dirname(full_dest), exist_ok=True)
         
-        # Build Docker run command
+        # Build Docker run command with database update after successful archive
         docker_cmd = [
             "docker", "run", "--rm",
             "--name", name,
             "-v", f"{ORIG}:{ORIG}:ro",
             "-v", f"{ZIP}:{ZIP}",
-            "alpine:3.18",
+            "-v", f"{os.path.dirname(DB)}:{os.path.dirname(DB)}",
+            "python:3.9-alpine",
             "/bin/sh", "-c",
-            f"apk add --no-cache pigz && "
+            f"apk add --no-cache pigz sqlite && "
             f"mkdir -p $(dirname '{full_dest}') && "
             f"tar -C '{ORIG}/{os.path.dirname(rel_path)}' "
             f"--use-compress-program=pigz -cf '{full_dest}' "
-            f"'{os.path.basename(rel_path)}'"
+            f"'{os.path.basename(rel_path)}' && "
+            f"echo 'Archive created successfully: {full_dest}' && "
+            # Add database update command after successful archive creation
+            f"python3 -c \"import sqlite3, time; "
+            f"db = sqlite3.connect('{DB}'); "
+            f"db.execute('UPDATE folder_state SET archived_at = ? WHERE folder_key = ?', "
+            f"(int(time.time()), '{rel_path}')); "
+            f"db.commit(); "
+            f"db.close(); "
+            f"print('Database updated for {rel_path}')\" || "
+            f"echo 'Failed to update database for {rel_path}'"
         ]
         
         # Start Docker container in background
@@ -226,14 +251,45 @@ def queue_zip_job_on_local(rel_path: str) -> None:
             os.path.basename(rel_path)
         ]
         
-        # Execute the tar command in background
-        process = subprocess.Popen(
-            tar_cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
-        
-        logger.info(f"Started local compression process for directory: {rel_path}")
+        # Execute the tar command and wait for it to complete
+        try:
+            result = subprocess.run(
+                tar_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True
+            )
+            
+            logger.info(f"Completed local compression for directory: {rel_path}")
+            
+            # Update the database after successful archive creation
+            # Use a completely separate connection that will be properly closed
+            db_manager = DatabaseManager(DB)
+            try:
+                with db_manager.get_connection() as conn:
+                    # Update the database with archive time
+                    conn.execute(
+                        "UPDATE folder_state SET archived_at = ? WHERE folder_key = ?",
+                        (int(time.time()), rel_path)
+                    )
+                    conn.commit()
+                    
+                    # Check status in database and log it
+                    cursor = conn.execute("SELECT fp, size_kb, file_count, last_seen, archived_at, zip_path FROM folder_state WHERE folder_key = ?", (rel_path,))
+                    record = cursor.fetchone()
+                    if record:
+                        fp, size_kb, file_count, last_seen, archived_at, zip_path = record
+                        logger.info(f"Database record for {rel_path}: fp={fp[:8]}..., size={size_kb}KB, files={file_count}, archived_at={archived_at}, zip_path={zip_path}")
+                    else:
+                        logger.warning(f"No database record found for {rel_path} after update")
+                    
+                logger.info(f"Database updated for {rel_path}")
+            except sqlite3.Error as db_error:
+                logger.error(f"Failed to update database for {rel_path}: {db_error}")
+                
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Failed to create archive for {rel_path}: {e.stderr.decode('utf-8', errors='replace')}")
+            
     except Exception as e:
         logger.error(f"Failed to create local job for {rel_path}: {e}")
         raise
@@ -247,9 +303,10 @@ def queue_zip_job(rel_path: str) -> None:
         rel_path: Relative path of directory to compress
     """
     # Get execution environment from environment variable, default to local
-    execution_env = os.environ.get("EXECUTION_ENV", "local").lower()
-    
-    if execution_env == "kubernetes" or execution_env == "kube":
+    execution_env: str = os.environ.get("EXECUTION_ENV", "local").lower()
+    logger.info(f"Queueing job for {rel_path} using environment: {execution_env}")
+
+    if execution_env in ("kubernetes", "kube"):
         queue_zip_job_on_kube(rel_path)
     elif execution_env == "docker":
         queue_zip_job_on_docker(rel_path)
@@ -275,40 +332,91 @@ def get_directory_stats(path: str) -> Tuple[str, int, int]:
         logger.error(f"Failed to get stats for directory {path}: {e}")
         raise
 
-def init_database(db_path: str) -> sqlite3.Connection:
+class DatabaseManager:
     """
-    Initialize the SQLite database connection and schema.
+    Manages SQLite database connections with connection pooling and proper resource management.
+    Follows context manager protocol for safe resource handling.
+    """
+    
+    _schema_initialized = False
+    
+    def __init__(self, db_path: str):
+        """
+        Initialize the database manager.
+        
+        Args:
+            db_path: Path to SQLite database file
+        """
+        self.db_path = db_path
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        
+    @classmethod
+    def init_schema(cls, db_path: str) -> None:
+        """Initialize the database schema if not already done.
+        
+        This is a class method that should be called once during application startup.
+        
+        Args:
+            db_path: Path to SQLite database file
+        """
+        if cls._schema_initialized:
+            return
+            
+        # Create a temporary connection just for schema initialization
+        conn = sqlite3.connect(db_path, timeout=20.0)
+        try:
+            conn.execute("PRAGMA busy_timeout = 10000")  # 10 seconds
+            conn.execute("PRAGMA journal_mode=WAL")
+            
+            # Read and execute the schema from persist_state.sql
+            sql_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "persist_state.sql")
+            try:
+                with open(sql_file_path, 'r') as f:
+                    schema_sql = f.read()
+                conn.executescript(schema_sql)
+                logger.info(f"Initialized database schema from {sql_file_path}")
+            except Exception as e:
+                logger.error(f"Failed to initialize database schema from file: {e}")
+                # Fall back to the inline schema as a backup
+                conn.execute("""CREATE TABLE IF NOT EXISTS folder_state (
+                            folder_key TEXT PRIMARY KEY, fp TEXT,
+                            size_kb INT, file_count INT,
+                            last_seen INT, archived_at INT, zip_path TEXT)""")
+                
+                conn.execute("""CREATE INDEX IF NOT EXISTS idx_folder_key ON folder_state (folder_key)""")
+                logger.warning("Using fallback inline schema definition")
+            
+            cls._schema_initialized = True
+        finally:
+            conn.close()
+    
+    def get_connection(self) -> sqlite3.Connection:
+        """
+        Get a new database connection with optimized settings.
+        
+        Returns:
+            A new SQLite connection
+        """
+        conn = sqlite3.connect(self.db_path, timeout=20.0)
+        conn.execute("PRAGMA busy_timeout = 10000")  # 10 seconds
+        return conn
+
+
+def init_database(db_path: str) -> DatabaseManager:
+    """
+    Initialize the SQLite database manager.
     
     Args:
         db_path: Path to SQLite database file
         
     Returns:
-        Initialized database connection
+        Initialized database manager
     """
-    # Ensure directory exists
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
-    
-    # Create and connect to the database
-    db = sqlite3.connect(db_path)
-    db.execute("PRAGMA journal_mode=WAL")
-    
-    # Read and execute the schema from persist_state.sql
-    sql_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "persist_state.sql")
-    try:
-        with open(sql_file_path, 'r') as f:
-            schema_sql = f.read()
-        db.executescript(schema_sql)
-        logger.info(f"Initialized database schema from {sql_file_path}")
-    except Exception as e:
-        logger.error(f"Failed to initialize database schema from file: {e}")
-        # Fall back to the inline schema as a backup
-        db.execute("""CREATE TABLE IF NOT EXISTS folder_state (
-                    folder_key TEXT PRIMARY KEY, fp TEXT,
-                    size_kb INT, file_count INT,
-                    last_seen INT, archived_at INT, zip_path TEXT)""")
-        logger.warning("Using fallback inline schema definition")
-    
-    return db
+    # Initialize the schema once at startup
+    DatabaseManager.init_schema(db_path)
+    # Return a manager instance
+    return DatabaseManager(db_path)
 
 def main() -> None:
     """
@@ -327,14 +435,14 @@ def main() -> None:
             logger.error(f"Failed to load any Kubernetes config: {e}")
             raise
     
-    # Initialize database
-    db = init_database(DB)
+    # Initialize database manager
+    db_manager = init_database(DB)
     logger.info(f"Initialized database at {DB}")
     
+    processed_count = 0
+    changed_count = 0
+    
     try:
-        processed_count = 0
-        changed_count = 0
-        
         # Scan level1/level2 directories
         for level1 in os.listdir(ORIG):
             p1 = os.path.join(ORIG, level1)
@@ -353,38 +461,42 @@ def main() -> None:
                 try:
                     fp, size, count = get_directory_stats(src)
                     
-                    # Check if directory changed since last scan
-                    row = db.execute("SELECT fp FROM folder_state WHERE folder_key=?", (rel,)).fetchone()
-                    if not row or row[0] != fp:
-                        # Directory is new or changed - enqueue job
-                        changed_count += 1
-                        logger.info(f"Change detected in {rel}, enqueueing archive job")
-                        queue_zip_job(rel)
+                    # Use a fresh connection for each operation to prevent locking
+                    with db_manager.get_connection() as conn:
+                        # Check if directory changed since last scan
+                        cursor = conn.execute("SELECT fp FROM folder_state WHERE folder_key=?", (rel,))
+                        row = cursor.fetchone()
                         
-                        # Update database record
-                        db.execute("""INSERT INTO folder_state
-                                    (folder_key, fp, size_kb, file_count, last_seen, archived_at, zip_path)
-                                    VALUES (?, ?, ?, ?, ?, NULL, ?)
-                                    ON CONFLICT(folder_key) DO UPDATE SET
-                                    fp = excluded.fp,
-                                    size_kb = excluded.size_kb,
-                                    file_count = excluded.file_count,
-                                    last_seen = excluded.last_seen,
-                                    archived_at = NULL""",
+                        if not row or row[0] != fp:
+                            # Directory is new or changed - enqueue job
+                            changed_count += 1
+                            logger.info(f"Change detected in {rel}, enqueueing archive job")
+                            
+                            # Insert the new record or update the change status first
+                            conn.execute(
+                                """INSERT INTO folder_state
+                                (folder_key, fp, size_kb, file_count, last_seen, archived_at, zip_path)
+                                VALUES (?, ?, ?, ?, ?, NULL, ?)
+                                ON CONFLICT(folder_key) DO UPDATE SET
+                                fp = excluded.fp,
+                                size_kb = excluded.size_kb,
+                                file_count = excluded.file_count,
+                                last_seen = excluded.last_seen,
+                                archived_at = NULL""",
                                 (rel, fp, size, count, int(time.time()),
-                                os.path.join(ZIP, f"{rel}.tar.gz")))
+                                 os.path.join(ZIP, f"{rel}.tar.gz"))
+                            )
+                            conn.commit()
+                            
+                            # Now that the database record exists, queue the job
+                            queue_zip_job(rel)
                 except Exception as e:
                     logger.error(f"Error processing directory {rel}: {e}")
         
-        # Commit all database changes
-        db.commit()
         logger.info(f"Scan completed: processed {processed_count} directories, detected {changed_count} changes")
     except Exception as e:
         logger.error(f"Error during directory scan: {e}")
-        db.rollback()
         raise
-    finally:
-        db.close()
 
 if __name__ == "__main__":
     main()
