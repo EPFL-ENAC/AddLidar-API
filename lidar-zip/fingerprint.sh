@@ -75,3 +75,26 @@ docker_fingerprint() {
     cut -d" " -f1
   '
 }
+
+docker_fingerprint() {
+  local dir="${1:-.}"  # Default to current directory if not specified
+  local abs_path
+  
+  # Get absolute path with error handling
+  abs_path=$(cd "$dir" 2>/dev/null && pwd)
+  if [ $? -ne 0 ] || [ -z "$abs_path" ]; then
+    echo "Error: Directory not found or inaccessible: $dir"
+    return 1
+  fi
+  
+  # For Windows users running Docker Desktop (adjust path format if needed)
+  if [[ "$OSTYPE" == "msys"* ]] || [[ "$OSTYPE" == "cygwin"* ]]; then
+    abs_path=$(echo "$abs_path" | sed 's|^/\([a-z]\)/|\1:/|i' | sed 's|/|\\|g')
+  fi
+  
+  # Run the fingerprint command in Docker
+  docker run --rm -v "${abs_path}:/data:ro" alpine:latest /bin/sh -c '
+    cd /data && 
+    find . -type f -print0 | sort -z | xargs -0 stat -c "%n|%s|%Y" 
+  '
+}
