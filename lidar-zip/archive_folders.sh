@@ -1,5 +1,5 @@
 #!/bin/bash
-# Minimal script to create compressed archives for all second-level folders
+ # Optimized script to create compressed archives for second-level folders based on benchmark results
 
 # Setup logging
 log() {
@@ -8,7 +8,7 @@ log() {
 }
 
 format_size() {
-  # Convert bytes to human-readable format without bc
+  # Convert bytes to human-readable format
   local bytes=$1
   if [[ $bytes -lt 1024 ]]; then
     echo "${bytes} B"
@@ -24,184 +24,86 @@ format_size() {
   fi
 }
 
-calculate_percentage() {
-  # Calculate percentage without bc
-  awk "BEGIN {printf \"%.2f\", $1 * 100 / $2}"
-}
-
-calculate_speed() {
-  # Calculate speed in MB/s without bc
-  awk "BEGIN {printf \"%.2f\", $1 / 1048576 / $2}"
-}
-
-
-get_pigz_threads() {
-  if command -v pgrep >/dev/null 2>&1; then
-    # Find the main pigz process
-    pigz_main_pid=$(pgrep "pigz" | head -n 1)
-    if [ -n "$pigz_main_pid" ]; then
-      # Count actual threads if we can access /proc
-      if [ -d "/proc/$pigz_main_pid/task" ]; then
-        ls -1 /proc/$pigz_main_pid/task | wc -l
-        return
-      else
-        # Fallback to checking if the -p parameter is working
-        pigz_command=$(ps -o command= -p $pigz_main_pid 2>/dev/null || echo "")
-        if [[ "$pigz_command" == *"-p 8"* ]]; then
-          echo "8"
-          return
-        fi
-      fi
-    fi
-  else
-    # Use ps for systems without pgrep
-    pigz_pid=$(ps aux | grep -v grep | grep "pigz" | awk '{print $2}' | head -n 1)
-    if [ -n "$pigz_pid" ] && [ -d "/proc/$pigz_pid/task" ]; then
-      ls -1 /proc/$pigz_pid/task | wc -l
-      return
-    fi
-  fi
-  
-  # Default fallback
-  echo "1"
-}
-
-monitor_progress() {
-  local pid=$1
-  local original_size=$2
-  local file_path=$3
-  local start_time=$4
-  local prev_size=0
-  local prev_time=$(date +%s)
-  
-  # Check every 2 seconds
-  while kill -0 $pid 2>/dev/null; do
-    if [ -f "$file_path" ]; then
-      current_size=$(stat -c%s "$file_path" 2>/dev/null || echo 0)
-      current_time=$(date +%s)
-      time_diff=$((current_time - prev_time))
-      
-      if [ "$current_size" -gt 0 ] && [ "$original_size" -gt 0 ] && [ "$time_diff" -gt 0 ]; then
-        # Calculate progress percentage
-        progress=$(calculate_percentage $current_size $original_size)
-        current_size_human=$(format_size $current_size)
-        
-        # Calculate current speed
-        size_diff=$((current_size - prev_size))
-        if [ "$size_diff" -gt 0 ]; then
-          current_speed=$(calculate_speed $size_diff $time_diff)
-          
-          pigz_processes=$(get_pigz_threads)
-
-          # Calculate ETA
-          remaining_bytes=$((original_size - current_size))
-          if [ "$size_diff" -gt 0 ]; then
-            eta_seconds=$(awk "BEGIN {printf \"%.0f\", $remaining_bytes / ($size_diff / $time_diff)}")
-            eta_human=$(date -d@$eta_seconds -u +%H:%M:%S)
-            log "   Progress: $current_size_human / $progress% complete - Speed: ${current_speed} MB/s - Threads: ${pigz_processes} - ETA: ${eta_human}"
-          else
-            log "   Progress: $current_size_human / $progress% complete - Threads: ${pigz_processes}"
-          fi
-        else
-          # Still show thread count even if speed can't be calculated
-          if command -v pgrep >/dev/null 2>&1; then
-            pigz_processes=$(pgrep -c "pigz" || echo 1)
-          else
-            pigz_processes=$(ps aux | grep -v grep | grep -c pigz || echo 1)
-          fi
-          log "   Progress: $current_size_human / $progress% complete - Threads: ${pigz_processes}"
-        fi
-        
-        # Update previous values for next iteration
-        prev_size=$current_size
-        prev_time=$current_time
-      fi
-    fi
-    sleep 2
-  done
-}
-
 log "Script started"
 
 SOURCE_DIR="$1"
 OUTPUT_DIR="$2"
 
+# Fixed thread count for pigz
+COMPRESS_THREADS=8
+
 log "Source directory: $SOURCE_DIR"
 log "Output directory: $OUTPUT_DIR"
+log "Using fixed $COMPRESS_THREADS compression threads"
 
 mkdir -p "$OUTPUT_DIR"
 log "Created output directory structure"
 
-find "$SOURCE_DIR" -mindepth 1 -maxdepth 1 -type d | while read -r first_dir; do
+# Find all second-level directories first
+second_level_dirs=()
+while IFS= read -r first_dir; do
   first_name=$(basename "$first_dir")
-  log "Processing first-level folder: $first_name"
   
   # Create directory for first-level folder
   first_level_output_dir="$OUTPUT_DIR/$first_name"
   mkdir -p "$first_level_output_dir"
   
-  find "$first_dir" -mindepth 1 -maxdepth 1 -type d | while read -r second_dir; do
-    second_name=$(basename "$second_dir")
-    archive_path="$first_level_output_dir/${second_name}.tar.gz"
-    
-    # Skip if archive already exists
-    if [ -f "$archive_path" ]; then
-      log "Skipping existing archive: $archive_path"
-      continue
-    fi
-    
-    log "Creating archive for: $second_name"
+  while IFS= read -r second_dir; do
+    second_level_dirs+=("$second_dir|$first_level_output_dir")
+  done < <(find "$first_dir" -mindepth 1 -maxdepth 1 -type d)
+done < <(find "$SOURCE_DIR" -mindepth 1 -maxdepth 1 -type d)
 
-    # Get original size
-    original_size=$(du -sb "$second_dir" | cut -f1)
-    original_size_human=$(format_size $original_size)
-    log "Original size: $original_size_human"
+total_dirs=${#second_level_dirs[@]}
+log "Found $total_dirs second-level directories to process"
 
-    # Create archive with timing
-    start_time=$(date +%s)
+# Process directories
+for ((i=0; i<${#second_level_dirs[@]}; i++)); do
+  IFS='|' read -r second_dir first_level_output_dir <<< "${second_level_dirs[$i]}"
+  second_name=$(basename "$second_dir")
+  archive_path="$first_level_output_dir/${second_name}.tar.gz"
+  
+  # Skip if archive already exists
+  if [ -f "$archive_path" ]; then
+    log "Skipping existing archive: $archive_path ($(($i+1))/$total_dirs)"
+    continue
+  fi
+  
+  log "Creating archive for: $second_name ($(($i+1))/$total_dirs)"
+
+  # Get original size
+  original_size=$(du -sb "$second_dir" | cut -f1)
+  original_size_human=$(format_size $original_size)
+  log "Original size: $original_size_human"
+
+  # Create archive with timing
+  start_time=$(date +%s)
+  
+  log "Creating tar and compressing with pigz..."
+  
+  # Use direct tar-to-pigz approach with fixed thread count
+  tar -C "$(dirname "$second_dir")" -cf - "$(basename "$second_dir")" | \
+  pigz -p $COMPRESS_THREADS > "$archive_path"
+  compression_status=$?
+  
+  end_time=$(date +%s)
+  elapsed=$((end_time - start_time))
+  
+  if [ -f "$archive_path" ] && [ $compression_status -eq 0 ]; then
+    compressed_size=$(stat -c%s "$archive_path")
+    compressed_size_human=$(format_size $compressed_size)
     
-    log "Creating tar and compressing with pigz..."
-    # Use pv for progress monitoring if available
-    if command -v pv >/dev/null 2>&1; then
-      # Use pv to show progress
-      tar -cf - -C "$(dirname "$second_dir")" "$(basename "$second_dir")" 2>/dev/null | 
-        pv -s "$original_size" | 
-        pigz - --verbose --blocksize 2048  > "$archive_path"
-      compression_status=$?
-    else
-      # Start compression in background
-      tar -cf - -C "$(dirname "$second_dir")" "$(basename "$second_dir")" 2>/dev/null | 
-        pigz --verbose --blocksize 2048  > "$archive_path" &
-      pigz_pid=$!
-      
-      # Monitor progress
-      monitor_progress $pigz_pid $original_size "$archive_path"
-      
-      # Wait for completion
-      wait $pigz_pid
-      compression_status=$?
-    fi
+    # Calculate compression ratio and speed
+    ratio=$(awk "BEGIN {printf \"%.2f\", $compressed_size * 100 / $original_size}")
+    speed=$(awk "BEGIN {printf \"%.2f\", $original_size / 1048576 / $elapsed}")
     
-    end_time=$(date +%s)
-    elapsed=$((end_time - start_time))
-    
-    if [ -f "$archive_path" ] && [ $compression_status -eq 0 ]; then
-      compressed_size=$(stat -c%s "$archive_path")
-      compressed_size_human=$(format_size $compressed_size)
-      
-      # Calculate compression ratio and speed
-      ratio=$(calculate_percentage $compressed_size $original_size)
-      speed=$(calculate_speed $original_size $elapsed)
-      
-      log "✅ Archive created: $archive_path"
-      log "   Time taken: ${elapsed}s"
-      log "   Original size: $original_size_human"
-      log "   Compressed size: $compressed_size_human (${ratio}% of original)"
-      log "   Compression speed: ${speed} MB/s"
-    else
-      log "❌ ERROR: Failed to create archive: $archive_path"
-    fi
-  done
+    log "✅ Archive created: $archive_path"
+    log "   Time taken: ${elapsed}s"
+    log "   Original size: $original_size_human"
+    log "   Compressed size: $compressed_size_human (${ratio}% of original)"
+    log "   Compression speed: ${speed} MB/s"
+  else
+    log "❌ ERROR: Failed to create archive: $archive_path"
+  fi
 done
 
 log "Script completed"
