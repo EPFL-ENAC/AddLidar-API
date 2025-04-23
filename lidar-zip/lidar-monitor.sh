@@ -36,7 +36,7 @@ echo "["
 first=true
 
 # Find all directories up to the second level (0=root, 1=first level, 2=second level)
-find "${LIDAR_ROOT}" -mindepth 1 -maxdepth 2 -type d | sort | while read -r dir; do
+find -L "${LIDAR_ROOT}" -mindepth 1 -maxdepth 2 -type d | sort | while read -r dir; do
     # Calculate metrics in parallel for better performance
     # Skip the separator for the first entry
     if [ "$first" = true ]; then
@@ -49,7 +49,7 @@ find "${LIDAR_ROOT}" -mindepth 1 -maxdepth 2 -type d | sort | while read -r dir;
     size_kb=$(du -sk "${dir}" 2>/dev/null | cut -f1)
     mod_time=$(stat -c %Y "${dir}" 2>/dev/null)
     mod_time_human=$(date -d "@${mod_time}" +"%Y-%m-%d %H:%M:%S" 2>/dev/null)
-    file_count=$(find "${dir}" -type f -printf . 2>/dev/null | wc -c)
+    file_count=$(find -L "${dir}" -type f -printf . 2>/dev/null | wc -c)
     
     # Output as JSON
     echo "  {"
@@ -83,58 +83,12 @@ if [ -f "${PREVIOUS_SCAN}" ]; then
         # Compare current with previous using jq
         # Logic: For each directory in current scan, find matching directory in previous scan
         # If size, mod_time, or file_count changed, report it
-        jq -r '
-        # Load both files
-        . as $current | 
-        inputs as $previous |
-        
-        # For each directory in current scan
-        $current[] | 
-        
-        # Find the same directory in previous scan
-        . as $curr | 
-        $previous[] | 
-        select(.path == $curr.path) as $prev |
-        
-        # Check if there are changes
-        if ($curr.size_kb != $prev.size_kb or 
-            $curr.mod_time_epoch > $prev.mod_time_epoch or 
-            $curr.file_count != $prev.file_count) then
-            # Output the path and the reason
-            $curr.path + " (Size: " + 
-            (if $curr.size_kb != $prev.size_kb then 
-                "changed from " + ($prev.size_kb|tostring) + "KB to " + ($curr.size_kb|tostring) + "KB" 
-            else 
-                "unchanged" 
-            end) + 
-            ", Files: " + 
-            (if $curr.file_count != $prev.file_count then 
-                "changed from " + ($prev.file_count|tostring) + " to " + ($curr.file_count|tostring) 
-            else 
-                "unchanged" 
-            end) + 
-            ", Last Modified: " + $curr.mod_time + ")"
-        else
-            empty
-        end
-        ' "${CURRENT_SCAN}" "${PREVIOUS_SCAN}" | sort
+        jq -r -f ./diff-changes.jq "${CURRENT_SCAN}" "${PREVIOUS_SCAN}" | sort
         
         # Also check for new directories that weren't in the previous scan
         echo
         echo "New directories:"
-        jq -r '
-        . as $current | 
-        inputs as $previous |
-        
-        # Get all paths from both scans
-        ($current | map(.path)) as $current_paths |
-        ($previous | map(.path)) as $previous_paths |
-        
-        # Find paths in current but not in previous
-        $current[] | 
-        select(.path as $p | $previous_paths | index($p) | not) |
-        .path + " (New, Size: " + (.size_kb|tostring) + "KB, Files: " + (.file_count|tostring) + ", Created: " + .mod_time + ")"
-        ' "${CURRENT_SCAN}" "${PREVIOUS_SCAN}" | sort
+        jq -r -f ./new-directories.jq "${CURRENT_SCAN}" "${PREVIOUS_SCAN}" | sort
         
         echo
         echo "====================================="

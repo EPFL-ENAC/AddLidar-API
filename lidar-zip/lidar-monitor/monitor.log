@@ -1,54 +1,11 @@
-[2025-04-21 14:47:22] Starting LiDAR directory change monitor
-[2025-04-21 14:47:22] Beginning new scan of ./lidar
-[2025-04-21 14:47:22] Scan completed
-[2025-04-21 14:47:22] No previous scan found. This is the first run.
-[2025-04-21 14:47:22] Monitor completed successfully
-[2025-04-21 14:47:37] Starting LiDAR directory change monitor
-[2025-04-21 14:47:37] Saved previous scan data
-[2025-04-21 14:47:37] Beginning new scan of ./lidar
-[2025-04-21 14:47:37] Scan completed
-[2025-04-21 14:47:37] Comparing with previous scan to detect changes
-[2025-04-21 14:47:37] Change detection completed. Check ./lidar-monitor/changes.txt for details.
-[2025-04-21 14:47:37] Monitor completed successfully
-[2025-04-21 14:48:38] Starting LiDAR directory change monitor
-[2025-04-21 14:48:38] Saved previous scan data
-[2025-04-21 14:48:38] Beginning new scan of ./lidar
-[2025-04-21 14:48:38] Scan completed
-[2025-04-21 14:48:38] Comparing with previous scan to detect changes
-[2025-04-21 14:48:38] Change detection completed. Check ./lidar-monitor/changes.txt for details.
-[2025-04-21 14:48:38] Monitor completed successfully
-[2025-04-21 14:49:17] Starting LiDAR directory change monitor
-[2025-04-21 14:49:17] Saved previous scan data
-[2025-04-21 14:49:17] Beginning new scan of ./lidar
-[2025-04-21 14:49:17] Scan completed
-[2025-04-21 14:49:17] Comparing with previous scan to detect changes
-[2025-04-21 14:49:17] Change detection completed. Check ./lidar-monitor/changes.txt for details.
-[2025-04-21 14:49:17] Monitor completed successfully
-[2025-04-21 14:49:31] Starting LiDAR directory change monitor
-[2025-04-21 14:49:31] Saved previous scan data
-[2025-04-21 14:49:31] Beginning new scan of ./lidar
-[2025-04-21 14:49:31] Scan completed
-[2025-04-21 14:49:31] Comparing with previous scan to detect changes
-[2025-04-21 14:49:31] Change detection completed. Check ./lidar-monitor/changes.txt for details.
-[2025-04-21 14:49:31] Monitor completed successfully
-[2025-04-22 10:34:37] Starting LiDAR directory change monitor
-[2025-04-22 10:34:37] Saved previous scan data
-[2025-04-22 10:34:37] Beginning new scan of ./lidar
-[2025-04-22 10:34:38] Scan completed
-[2025-04-22 10:34:38] Comparing with previous scan to detect changes
-[2025-04-22 10:34:38] Change detection completed. Check ./lidar-monitor/changes.txt for details.
-[2025-04-22 10:34:38] Monitor completed successfully
-[2025-04-22 10:35:40] Starting LiDAR directory change monitor
-[2025-04-22 10:35:40] Saved previous scan data
-[2025-04-22 10:35:40] Beginning new scan of ./lidar
-[2025-04-22 10:35:40] Scan completed
-[2025-04-22 10:35:40] Comparing with previous scan to detect changes
-[2025-04-22 10:35:40] Change detection completed. Check ./lidar-monitor/changes.txt for details.
-[2025-04-22 10:35:40] Monitor completed successfully
-[2025-04-22 10:35:52] Starting LiDAR directory change monitor
-[2025-04-22 10:35:52] Saved previous scan data
-[2025-04-22 10:35:52] Beginning new scan of ./lidar
-[2025-04-22 10:35:52] Scan completed
-[2025-04-22 10:35:52] Comparing with previous scan to detect changes
-[2025-04-22 10:35:52] Change detection completed. Check ./lidar-monitor/changes.txt for details.
-[2025-04-22 10:35:52] Monitor completed successfully
+[2025-04-22 16:27:21] Starting LiDAR directory change monitor
+[2025-04-22 16:27:21] Beginning new scan of ./lidar
+[2025-04-22 16:29:28] Scan completed
+[2025-04-22 16:29:28] No previous scan found. This is the first run; initializing previous scan data.
+[2025-04-22 16:29:54] Starting LiDAR directory change monitor
+[2025-04-22 16:29:54] Saved previous scan data
+[2025-04-22 16:29:54] Beginning new scan of ./lidar
+[2025-04-22 16:32:03] Scan completed
+[2025-04-22 16:32:03] Comparing with previous scan to detect changes
+[2025-04-22 16:32:03] Change detection completed. Check ./lidar-monitor/changes.txt for details.
+[2025-04-22 16:32:03] Monitor completed successfully

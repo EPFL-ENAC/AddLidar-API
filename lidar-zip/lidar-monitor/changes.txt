@@ -1,9 +1,7 @@
-Detected changes (Tue Apr 22 10:35:52 AM CEST 2025):
+Detected changes (Tue Apr 22 16:32:03 CEST 2025):
 =====================================
 Folders that need processing:
 
-./lidar/0001_Mission_Root/05_GNSS_INS_Data (Size: changed from 9176KB to 4KB, Files: changed from 1 to 0, Last Modified: 2025-04-22 10:35:51)
-./lidar/0001_Mission_Root (Size: changed from 18384KB to 9212KB, Files: changed from 2 to 1, Last Modified: 2025-04-21 14:48:36)
 
 New directories:
 
