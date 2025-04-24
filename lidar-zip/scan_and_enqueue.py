@@ -3,6 +3,8 @@
 # dependencies = [
 #   "kubernetes",
 #   "pydantic",
+#   "jinja2",
+#   "pysqlite3",
 # ]
 # ///
 """
@@ -21,13 +23,15 @@ import uuid
 import logging
 import sys
 import argparse
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Set
+from datetime import datetime
 
 try:
-    # Import Kubernetes client - will be automatically installed by uv when running with "uv run"
+    # Import dependencies
     from kubernetes import client, config
+    import jinja2
 except ImportError:
-    print("Error: kubernetes module not found. Run this script with 'uv run' to auto-install dependencies.")
+    print("Error: required modules not found. Run this script with 'uv run' to auto-install dependencies.")
     sys.exit(1)
 
 # Initial logger setup with default level (will be updated in main)
@@ -95,203 +99,6 @@ def fingerprint(path: str) -> str:
     except Exception as e:
         logger.error(f"Failed to generate fingerprint for {path}: {e}")
         raise
-
-def queue_zip_job_on_kube(rel_path: str, export_only: bool = False) -> None:
-    # Access global constants ORIG, ZIP, DB
-    global ORIG, ZIP, DB
-    full_source = os.path.join(ORIG, rel_path)
-    full_dest = os.path.join(ZIP, f"{rel_path}.tar.gz")
-    name = f"zip-{uuid.uuid4().hex[:10]}"
-    try:
-        archive_script = (
-            f"mkdir -p $(dirname '{full_dest}') && "
-            f"tar -C '{ORIG}/{os.path.dirname(rel_path)}' "
-            f"--use-compress-program=pigz -cf '{full_dest}' "
-            f"'{os.path.basename(rel_path)}' && "
-            f"echo 'Archive created successfully: {full_dest}' && "
-            f"python3 -c \"import sqlite3, time; "
-            f"db = sqlite3.connect('{DB}'); "
-            f"db.execute('UPDATE folder_state SET archived_at = ? WHERE folder_key = ?', "
-            f"(int(time.time()), '{rel_path}')); "
-            f"db.commit(); "
-            f"db.close(); "
-            f"print('Database updated for {rel_path}')\" || "
-            f"echo 'Failed to update database for {rel_path}'"
-        )
-        
-        job = client.V1Job(
-            metadata=client.V1ObjectMeta(name=name),
-            spec=client.V1JobSpec(
-                template=client.V1PodTemplateSpec(
-                    spec=client.V1PodSpec(
-                        restart_policy="Never",
-                        containers=[client.V1Container(
-                            name="zip",
-                            image="python:3.9-alpine",
-                            command=["/bin/sh", "-c", archive_script],
-                            volume_mounts=[
-                                client.V1VolumeMount(mount_path=ORIG, name="orig", read_only=True),
-                                client.V1VolumeMount(mount_path=ZIP, name="zip"),
-                                client.V1VolumeMount(mount_path=os.path.dirname(DB), name="db"),
-                            ]
-                        )],
-                        volumes=[
-                            client.V1Volume(name="orig", host_path=client.V1HostPathVolumeSource(path=ORIG)),
-                            client.V1Volume(name="zip", host_path=client.V1HostPathVolumeSource(path=ZIP)),
-                            client.V1Volume(name="db", host_path=client.V1HostPathVolumeSource(path=os.path.dirname(DB))),
-                        ]
-                    )
-                )
-            )
-        )
-        if export_only:
-            from kubernetes.client import ApiClient
-            job_yaml = ApiClient().sanitize_for_serialization(job)
-            import yaml
-            print(yaml.dump(job_yaml))
-            logger.info(f"Exported Kubernetes job YAML for directory: {rel_path}")
-        else:
-            client.BatchV1Api().create_namespaced_job("archives", job)
-            logger.info(f"Queued archive job '{name}' for directory: {rel_path}")
-    except Exception as e:
-        logger.error(f"Failed to create K8s job for {rel_path}: {e}")
-        raise
-
-
-def queue_zip_job_on_docker(rel_path: str, export_only: bool = False) -> None:
-    # Access global constants ORIG, ZIP, DB
-    global ORIG, ZIP, DB
-    full_source = os.path.join(ORIG, rel_path)
-    full_dest = os.path.join(ZIP, f"{rel_path}.tar.gz")
-    name = f"zip-{uuid.uuid4().hex[:10]}"
-    try:
-        os.makedirs(os.path.dirname(full_dest), exist_ok=True)
-        docker_cmd = [
-            "docker", "run", "--rm",
-            "--name", name,
-            "-v", f"{ORIG}:{ORIG}:ro",
-            "-v", f"{ZIP}:{ZIP}",
-            "-v", f"{os.path.dirname(DB)}:{os.path.dirname(DB)}",
-            "python:3.9-alpine",
-            "/bin/sh", "-c",
-            f"apk add --no-cache pigz sqlite && "
-            f"mkdir -p $(dirname '{full_dest}') && "
-            f"tar -C '{ORIG}/{os.path.dirname(rel_path)}' "
-            f"--use-compress-program=pigz -cf '{full_dest}' "
-            f"'{os.path.basename(rel_path)}' && "
-            f"echo 'Archive created successfully: {full_dest}' && "
-            f"python3 -c \"import sqlite3, time; "
-            f"db = sqlite3.connect('{DB}'); "
-            f"db.execute('UPDATE folder_state SET archived_at = ? WHERE folder_key = ?', "
-            f"(int(time.time()), '{rel_path}')); "
-            f"db.commit(); "
-            f"db.close(); "
-            f"print('Database updated for {rel_path}')\" || "
-            f"echo 'Failed to update database for {rel_path}'"
-        ]
-        
-        if export_only:
-            print("Docker command:", " ".join(docker_cmd))
-            logger.info(f"Exported Docker command for directory: {rel_path}")
-        else:
-            process = subprocess.Popen(
-                docker_cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
-            logger.info(f"Launched Docker container '{name}' for directory: {rel_path}")
-    except Exception as e:
-        logger.error(f"Failed to create Docker job for {rel_path}: {e}")
-        raise
-
-
-def queue_zip_job_on_local(rel_path: str, export_only: bool = False) -> None:
-    # Access global constants ORIG, ZIP, DB
-    global ORIG, ZIP, DB
-    full_source = os.path.join(ORIG, rel_path)
-    full_dest = os.path.join(ZIP, f"{rel_path}.tar.gz")
-    try:
-        os.makedirs(os.path.dirname(full_dest), exist_ok=True)
-        try:
-            subprocess.run(["which", "pigz"], check=True,
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            compress_program = "pigz"
-        except subprocess.CalledProcessError:
-            logger.warning("pigz not found, falling back to gzip")
-            compress_program = "gzip"
-        tar_cmd = [
-            "tar",
-            "-C", f"{ORIG}/{os.path.dirname(rel_path)}",
-            f"--use-compress-program={compress_program}",
-            "-cf", full_dest,
-            os.path.basename(rel_path)
-        ]
-        if export_only:
-            print("Tar command:", " ".join(tar_cmd))
-            logger.info(f"Exported local tar command for directory: {rel_path}")
-            return
-
-        # Execute the tar command and wait for it to complete
-        try:
-            result = subprocess.run(
-                tar_cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                check=True
-            )
-            
-            logger.info(f"Completed local compression for directory: {rel_path}")
-            
-            # Update the database after successful archive creation
-            # Use a completely separate connection that will be properly closed
-            # Pass DB path explicitly
-            db_manager = DatabaseManager(DB)
-            try:
-                with db_manager.get_connection() as conn:
-                    # Update the database with archive time
-                    conn.execute(
-                        "UPDATE folder_state SET archived_at = ? WHERE folder_key = ?",
-                        (int(time.time()), rel_path)
-                    )
-                    conn.commit()
-                    
-                    # Check status in database and log it
-                    cursor = conn.execute("SELECT fp, size_kb, file_count, last_seen, archived_at, zip_path FROM folder_state WHERE folder_key = ?", (rel_path,))
-                    record = cursor.fetchone()
-                    if record:
-                        fp, size_kb, file_count, last_seen, archived_at, zip_path = record
-                        logger.info(f"Database record for {rel_path}: fp={fp[:8]}..., size={size_kb}KB, files={file_count}, archived_at={archived_at}, zip_path={zip_path}")
-                    else:
-                        logger.warning(f"No database record found for {rel_path} after update")
-                    
-                logger.info(f"Database updated for {rel_path}")
-            except sqlite3.Error as db_error:
-                logger.error(f"Failed to update database for {rel_path}: {db_error}")
-                
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to create archive for {rel_path}: {e.stderr.decode('utf-8', errors='replace')}")
-    except Exception as e:
-        logger.error(f"Failed to create local job for {rel_path}: {e}")
-        raise
-        
-    logger.info(f"Completed local compression for directory: {rel_path}")
-
-def queue_zip_job(rel_path: str, export_only: bool = False) -> None:
-    """
-    Queue a job to compress a directory based on the configured execution environment.
-    """
-    # Use the execution_env from command-line arguments instead of environment variable
-    global args
-    execution_env: str = args.execution_env.lower()
-    
-    logger.info(f"Queueing job for {rel_path} using environment: {execution_env}")
-    if execution_env in ("kubernetes", "kube"):
-        queue_zip_job_on_kube(rel_path, export_only)
-    elif execution_env == "docker":
-        queue_zip_job_on_docker(rel_path, export_only)
-    else:
-        queue_zip_job_on_local(rel_path, export_only)
-
 
 def get_directory_stats(path: str) -> Tuple[str, int, int]:
     """
@@ -395,6 +202,129 @@ def init_database(db_path: str) -> DatabaseManager:
     # Return a manager instance
     return DatabaseManager(db_path)
 
+def collect_changed_folders(db_manager: DatabaseManager, dry_run: bool = False) -> List[str]:
+    """
+    Scan directories and collect paths of changed folders without immediately queueing jobs.
+    
+    Args:
+        db_manager: Database manager instance
+        dry_run: Whether to perform a dry run without modifying the database
+        
+    Returns:
+        List of relative paths to folders that have changed
+    """
+    global ORIG
+    changed_folders: List[str] = []
+    
+    for level1 in os.listdir(ORIG):
+        p1 = os.path.join(ORIG, level1)
+        if not os.path.isdir(p1):
+            continue
+            
+        for level2 in os.listdir(p1):
+            rel = os.path.join(level1, level2)
+            src = os.path.join(ORIG, rel)
+            if not os.path.isdir(src):
+                continue
+                
+            try:
+                logger.info(f"Processing directory: {rel}")
+                fp, size, count = get_directory_stats(src)
+                
+                with db_manager.get_connection() as conn:
+                    cursor = conn.execute("SELECT fp FROM folder_state WHERE folder_key=?", (rel,))
+                    row = cursor.fetchone()
+                    
+                if not row or row[0] != fp:
+                    logger.info(f"Change detected in {rel}")
+                    changed_folders.append(rel)
+                    
+                    if not dry_run:
+                        with db_manager.get_connection() as conn:
+                            conn.execute(
+                                """INSERT INTO folder_state
+                                (folder_key, fp, size_kb, file_count, last_seen, archived_at, zip_path)
+                                VALUES (?, ?, ?, ?, ?, NULL, ?)
+                                ON CONFLICT(folder_key) DO UPDATE SET
+                                size_kb = excluded.size_kb,
+                                file_count = excluded.file_count,
+                                last_seen = excluded.last_seen,
+                                archived_at = NULL,
+                                zip_path = excluded.zip_path""",
+                                (rel, fp, size, count, int(time.time()),
+                                os.path.join(ZIP, f"{rel}.tar.gz"))
+                            )
+                            conn.commit()
+            except Exception as e:
+                logger.error(f"Error processing directory {rel}: {e}")
+                
+    return changed_folders
+
+def queue_batch_zip_job(folders: List[str], export_only: bool = False) -> None:
+    """
+    Create a single batch Kubernetes job to process multiple folders.
+    
+    Args:
+        folders: List of relative folder paths to archive
+        export_only: Whether to only export the job YAML without creating it
+    """
+    global ORIG, ZIP, DB, args
+    
+    if not folders:
+        logger.info("No folders to process, skipping batch job creation")
+        return
+        
+    # Generate timestamp for unique job name
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    
+    try:
+        # Load Jinja2 template
+        template_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 
+                                    "job-batch-lidar-zip.template.yaml")
+        
+        if not os.path.exists(template_path):
+            logger.error(f"Template file not found at {template_path}")
+            return
+            
+        with open(template_path, 'r') as f:
+            template_content = f.read()
+            
+        # Setup Jinja2 environment
+        template = jinja2.Template(template_content)
+        
+        # Prepare template variables
+        context = {
+            'folders': folders,
+            'timestamp': timestamp,
+            'parallelism': args.parallelism,
+            'orig_dir': ORIG,
+            'zip_dir': ZIP,
+            'db_path': DB,
+            'db_dir': os.path.dirname(DB)
+        }
+        
+        # Render the template
+        job_yaml = template.render(**context)
+        
+        if export_only:
+            print(job_yaml)
+            logger.info(f"Exported batch job YAML for {len(folders)} folders")
+            return
+            
+        # Create job from YAML
+        import yaml
+        from kubernetes import utils
+        
+        job_dict = yaml.safe_load(job_yaml)
+        utils.create_from_dict(client.ApiClient(), job_dict)
+        
+        job_name = job_dict['metadata']['name']
+        logger.info(f"Created batch job '{job_name}' for {len(folders)} folders")
+        return len(folders)
+    except Exception as e:
+        logger.error(f"Failed to create batch job: {e}")
+        raise
+
 def main() -> None:
     """
     Main function to scan directories and enqueue archive jobs.
@@ -426,12 +356,12 @@ def main() -> None:
         default="INFO",
         help="Set logging level (default: INFO)"
     )
-    parser.add_argument(
-        "--execution-env",
-        choices=["local", "docker", "kubernetes", "kube"],
-        default="local",
-        help="Execution environment for archive jobs (default: local)"
-    )
+    # parser.add_argument(
+    #     "--execution-env",
+    #     choices=["local", "docker", "kubernetes", "kube", "batch"],
+    #     default="local",
+    #     help="Execution environment for archive jobs (default: local)"
+    # )
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -448,6 +378,12 @@ def main() -> None:
         default=0,
         help="Stop after the specified number of archive jobs have been queued (0 for unlimited)"
     )
+    parser.add_argument(
+        "--parallelism",
+        type=int,
+        default=4,
+        help="Number of parallel jobs to run in batch mode"
+    )
     args = parser.parse_args()
 
     # Set logging level from command line argument
@@ -459,11 +395,10 @@ def main() -> None:
     ORIG = args.original_root
     ZIP = args.zip_root
     DB = args.db_path
-    execution_env = args.execution_env.lower()
+    execution_env = "batch"
 
     dry_run: bool = args.dry_run
     export_only: bool = args.export_only
-    max_jobs: Optional[int] = args.max_jobs if args.max_jobs > 0 else None
 
     # Configuration validation moved here
     if not os.path.isdir(ORIG):
@@ -482,10 +417,10 @@ def main() -> None:
 
     logger.info(f"Starting scan: ORIG='{ORIG}', ZIP='{ZIP}', DB='{DB}'")
     logger.info(f"Options: execution_env='{execution_env}', log_level='{log_level}', "
-                f"dry-run={dry_run}, export_only={export_only}, max_jobs={max_jobs}")
+                f"dry-run={dry_run}, export_only={export_only}")
 
-    # Load Kube config only if needed - now using the command line argument
-    if execution_env in ("kubernetes", "kube"):
+    # Load Kube config if using kubernetes modes
+    if execution_env in ("kubernetes", "kube", "batch"):
         try:
             config.load_incluster_config()
             logger.info("Loaded Kubernetes in-cluster config")
@@ -499,78 +434,29 @@ def main() -> None:
                 # Exit if Kubernetes mode is requested but config loading fails
                 sys.exit(1)
 
-    logger.info(f"Initializing database... at path ${DB}")
-    db_manager = init_database(DB) # DB path comes from args now
+    logger.info(f"Initializing database at path {DB}")
+    db_manager = init_database(DB)
     logger.info(f"Initialized database at {DB}")
 
-    processed_count = 0
-    changed_count = 0
-    jobs_queued = 0
-    max_jobs_reached = False
+    # Process based on execution environment
+    # Collect all changed folders first
+    changed_folders = collect_changed_folders(db_manager, dry_run)
+    
+    # Limit folders if max_jobs is specified
+    max_jobs = args.max_jobs
+    length_changed_folders = len(changed_folders)
+    if max_jobs > 0 and length_changed_folders > max_jobs:
+        logger.info(f"Limiting to {max_jobs} out of {length_changed_folders} changed folders")
+        changed_folders = changed_folders[:max_jobs]
+        
+    # Create a single batch job for all folders
+    if changed_folders:
+        logger.info(f"Creating batch job for {length_changed_folders} changed folders")
+        processed_count = queue_batch_zip_job(changed_folders, export_only)
+    else:
+        logger.info("No changes detected, no batch job needed")
 
-    for level1 in os.listdir(ORIG):
-        p1 = os.path.join(ORIG, level1)
-        if not os.path.isdir(p1):
-            continue
-        for level2 in os.listdir(p1):
-            rel = os.path.join(level1, level2)
-            src = os.path.join(ORIG, rel)
-            if not os.path.isdir(src):
-                continue
-
-            processed_count += 1
-            try:
-                logger.info(f"Processing directory: {rel}")
-                fp, size, count = get_directory_stats(src)
-                if not dry_run:
-                    with db_manager.get_connection() as conn:
-                        cursor = conn.execute("SELECT fp FROM folder_state WHERE folder_key=?", (rel,))
-                        row = cursor.fetchone()
-                        if not row or row[0] != fp:
-                            changed_count += 1
-                            logger.info(f"Change detected in {rel}, enqueueing archive job")
-                            conn.execute(
-                                """INSERT INTO folder_state
-                                (folder_key, fp, size_kb, file_count, last_seen, archived_at, zip_path)
-                                VALUES (?, ?, ?, ?, ?, NULL, ?)
-                                ON CONFLICT(folder_key) DO UPDATE SET
-                                fp = excluded.fp,
-                                size_kb = excluded.size_kb,
-                                file_count = excluded.file_count,
-                                last_seen = excluded.last_seen,
-                                archived_at = NULL""",
-                                (rel, fp, size, count, int(time.time()),
-                                 os.path.join(ZIP, f"{rel}.tar.gz"))
-                            )
-                            conn.commit()
-                            queue_zip_job(rel, export_only)
-                            jobs_queued += 1
-                            if max_jobs is not None and jobs_queued >= max_jobs:
-                                logger.info("Reached maximum number of archive jobs to run. Stopping scan.")
-                                max_jobs_reached = True
-                                break
-                else:
-                    # In dry-run mode, just log the detected change
-                    if not os.path.isdir(src):
-                        continue
-                    with db_manager.get_connection() as conn:
-                        cursor = conn.execute("SELECT fp FROM folder_state WHERE folder_key=?", (rel,))
-                        row = cursor.fetchone()
-                    if not row or row[0] != fp:
-                        changed_count += 1
-                        jobs_queued += 1
-                        if max_jobs is not None and jobs_queued >= max_jobs:
-                            logger.info("Reached maximum number of archive jobs to run. Stopping scan.")
-                            max_jobs_reached = True
-                            break
-                        logger.info(f"[Dry-run] Change detected in {rel}, no DB update or job queuing.")
-
-            except Exception as e:
-                logger.error(f"Error processing directory {rel}: {e}")
-        if max_jobs_reached:
-            break
-
-    logger.info(f"Scan completed: processed {processed_count} directories, detected {changed_count} changes")
+    logger.info(f"Scan completed: detected {length_changed_folders} changes")
 
 if __name__ == "__main__":
     main()

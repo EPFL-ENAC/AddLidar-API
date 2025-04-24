@@ -1,0 +1,124 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "job-batch-lidar-zip-{{ timestamp }}"
+  namespace: "epfl-cryos-addlidar-potree-prod"
+spec:
+  ttlSecondsAfterFinished: 3600 # 1 hour
+  completions: {{ folders|length }}  # Dynamic based on folder count
+  parallelism: {{ parallelism|default(4) }}
+  completionMode: Indexed
+  template:
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: job-name
+                      operator: In
+                      values:
+                        - job-batch-lidar-zip-{{ timestamp }}
+                topologyKey: "kubernetes.io/hostname"
+      restartPolicy: Never
+      initContainers:
+        - name: "prepare-folders"
+          image: "docker.io/library/bash"
+          command:
+            - "bash"
+            - "-c"
+            - |
+              # Array of folders to process
+              folders=(
+              {% for folder in folders %}
+                "{{ folder }}"
+              {% endfor %}
+              )
+
+              # Get the current folder based on job index
+              current_folder=${folders[$JOB_COMPLETION_INDEX]}
+
+              # Check if folder exists and is not empty
+              if [ -n "${current_folder}" ] && [ -d "/lidar/${current_folder}" ] && [ "$(ls -A /lidar/${current_folder} 2>/dev/null)" ]; then
+                echo "Found valid folder: /lidar/${current_folder}"
+                # Write the input and output paths to a file for the main container
+                echo "/lidar/${current_folder}" > /data/input_path.txt
+                echo "/zips/${current_folder}.tar.gz" > /data/output_path.txt
+                echo "true" > /data/folder_valid.txt
+              else
+                echo "WARNING: Folder /lidar/${current_folder} does not exist or is empty"
+                echo "false" > /data/folder_valid.txt
+              fi
+          volumeMounts:
+            - mountPath: "{{ orig_dir }}"
+              name: lidar-data
+              readOnly: true
+            - mountPath: /data
+              name: data
+          resources:
+            limits:
+              cpu: "100m"
+              memory: "100Mi"
+            requests:
+              cpu: "10m"
+              memory: "10Mi"
+      containers:
+        - name: "lidar-zip-job"
+          image: "ghcr.io/epfl-enac/lidar-zip:latest"
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              # Check if the folder is valid before proceeding
+              if [ -e "/data/folder_valid.txt" ] && [ "$(cat /data/folder_valid.txt)" == "true" ]; then
+                INPUT_PATH=$(cat /data/input_path.txt)
+                OUTPUT_PATH=$(cat /data/output_path.txt)
+                echo "Processing folder: $INPUT_PATH"
+                /usr/local/bin/archive_one_folder.sh "$INPUT_PATH" "$OUTPUT_PATH"
+                echo "Archive created: $OUTPUT_PATH"
+                # Update database
+                echo "Updating database for ${input_path#{{ orig_dir }}/}"
+                # Install necessary tools
+                apk add --no-cache sqlite
+                # Update database with both timestamp AND fingerprint
+                python3 -c "import sqlite3, time; \
+                db = sqlite3.connect('{{ db_path }}'); \
+                db.execute('UPDATE folder_state SET archived_at = ?, fp = ? WHERE folder_key = ?', \
+                (int(time.time()), '${current_fingerprint}', '${input_path#{{ orig_dir }}/}')); \
+                db.commit();"
+                print('Database updated for ${input_path#{{ orig_dir }}/}')" || \
+                echo "Failed to update database for ${input_path#{{ orig_dir }}/}"
+              else
+                echo "Skipping archive process - invalid or empty folder"
+                exit 0
+              fi
+          volumeMounts:
+            - mountPath: "{{ orig_dir }}"
+              name: lidar-data
+              readOnly: true
+            - mountPath: "{{ zip_dir }}"
+              name: lidar-zips
+            - mountPath: /data
+              name: data
+            - mountPath: "{{ db_dir }}"
+              name: db-dir
+          resources:
+            limits:
+              cpu: "8"
+              memory: "8Gi"
+            requests:
+              cpu: "1"
+              memory: "1Gi"
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: lidar-data
+          persistentVolumeClaim:
+            claimName: addlidar-smb-pvc
+        - name: lidar-zips
+          persistentVolumeClaim:
+            claimName: addlidar-smb-zip-pvc
+        - name: db-dir
+          persistentVolumeClaim:
+            claimName: addlidar-db-pvc

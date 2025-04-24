@@ -12,7 +12,10 @@ RUN apk add --no-cache \
     py3-pip \
     && pip install --no-cache-dir \
     kubernetes \
-    pydantic
+    pydantic \
+    jinja2 \
+    pysqlite3 \
+    sqlite-utils
 
 # Command to run the script with the specified arguments
 CMD ["python", "scan_and_enqueue.py", "--original-root", "./lidar", "--zip-root", "./lidar-zips", "--db-path", "./state/lidar-archive.db", "--dry-run"]
