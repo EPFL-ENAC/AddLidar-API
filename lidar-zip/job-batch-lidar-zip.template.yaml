@@ -5,8 +5,8 @@ metadata:
   namespace: "epfl-cryos-addlidar-potree-prod"
 spec:
   ttlSecondsAfterFinished: 3600 # 1 hour
-  completions: { { folders|length } } # Dynamic based on folder count
-  parallelism: { { parallelism|default(4) } }
+  completions: "{{ folders|length }}"" # Dynamic based on folder count
+  parallelism: "{{ parallelism|default(4) }}""
   completionMode: Indexed
   template:
     spec:
