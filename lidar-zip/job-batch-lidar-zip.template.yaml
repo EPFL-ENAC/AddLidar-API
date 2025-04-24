@@ -50,8 +50,8 @@ spec:
               if [ -n "${folder_name}" ] && [ -d "/lidar/${folder_name}" ] && [ "$(ls -A /lidar/${folder_name} 2>/dev/null)" ]; then
                 echo "Found valid folder: /lidar/${folder_name} (Fingerprint: ${folder_fingerprint})"
                 # Write the input and output paths to a file for the main container
-                echo "/lidar/${folder_name}" > /data/input_path.txt
-                echo "/zips/${folder_name}.tar.gz" > /data/output_path.txt
+                echo "${folder_name}" > /data/input_path.txt
+                echo "${folder_name}.tar.gz" > /data/output_path.txt
                 echo "${folder_fingerprint}" > /data/folder_fingerprint.txt
                 echo "true" > /data/folder_valid.txt
               else
@@ -82,21 +82,26 @@ spec:
                 INPUT_PATH=$(cat /data/input_path.txt)
                 OUTPUT_PATH=$(cat /data/output_path.txt)
                 FINGERPRINT=$(cat /data/folder_fingerprint.txt)
+                
                 echo "Processing folder: $INPUT_PATH"
-                /usr/local/bin/archive_one_folder.sh "$INPUT_PATH" "$OUTPUT_PATH"
+                /usr/local/bin/archive_one_folder.sh /lidar/"$INPUT_PATH" /zips/"$OUTPUT_PATH"
                 echo "Archive created: $OUTPUT_PATH"
+                
                 # Update database
                 echo "Updating database for ${INPUT_PATH}"
-                # Install necessary tools
-                apk add --no-cache sqlite
-                # Update database with both timestamp AND fingerprint
-                python3 -c "import sqlite3, time; \
-                db = sqlite3.connect('{{ db_path }}'); \
-                db.execute('UPDATE folder_state SET archived_at = ?, fp = ? WHERE folder_key = ?', \
-                (int(time.time()), '${FINGERPRINT}', '${INPUT_PATH}')); \
-                db.commit();"
-                print('Database updated for ${INPUT_PATH}')" || \
+                # Update database with both timestamp AND fingerprint using direct SQLite command
+                TIMESTAMP=$(date +%s)
+                echo "Values to be updated: TIMESTAMP=${TIMESTAMP}, FINGERPRINT=${FINGERPRINT} for ${INPUT_PATH}"
+                sqlite3 "{{ db_path }}" \
+                  "UPDATE folder_state SET archived_at = ${TIMESTAMP}, fp = '${FINGERPRINT}' WHERE folder_key = '${INPUT_PATH}';" && \
+                echo "Database updated for ${INPUT_PATH}" || \
                 echo "Failed to update database for ${INPUT_PATH}"
+
+                # Show the current state of the database record after update
+                echo "Database record state after update:"
+                sqlite3 -header -column "{{ db_path }}" \
+                  "SELECT * FROM folder_state;" || \
+                echo "Failed to query database record"
               else
                 echo "Skipping archive process - invalid or empty folder"
                 exit 0

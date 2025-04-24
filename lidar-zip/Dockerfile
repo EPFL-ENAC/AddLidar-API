@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y \
     bash \
     findutils \
     coreutils \
+    sqlite3 \
     gawk \
     pigz \
     procps \

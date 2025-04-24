@@ -286,13 +286,18 @@ def collect_changed_folders(
     return changed_folders
 
 
-def queue_batch_zip_job(folders: List[List[str]], export_only: bool = False) -> None:
+def queue_batch_zip_job(
+    folders: List[List[str]], export_only: bool = False
+) -> Optional[int]:
     """
     Create a single batch Kubernetes job to process multiple folders.
 
     Args:
         folders: List of relative folder paths to archive with their fingerprints [rel, fp]
         export_only: Whether to only export the job YAML without creating it
+
+    Returns:
+        Optional[int]: Number of folders processed or None if no action was taken
     """
     global ORIG, ZIP, DB, args
 
@@ -336,7 +341,7 @@ def queue_batch_zip_job(folders: List[List[str]], export_only: bool = False) -> 
 
         if export_only:
             print(job_yaml)
-            logger.info(f"Exported batch job YAML for {len(folders)} folders")
+            logger.info(f"Printed batch job YAML for {len(folders)} folders")
             return
 
         # Create job from YAML
@@ -344,11 +349,15 @@ def queue_batch_zip_job(folders: List[List[str]], export_only: bool = False) -> 
         from kubernetes import utils
 
         job_dict = yaml.safe_load(job_yaml)
-        utils.create_from_dict(client.ApiClient(), job_dict)
-
-        job_name = job_dict["metadata"]["name"]
-        logger.info(f"Created batch job '{job_name}' for {len(folders)} folders")
-        return len(folders)
+        try:
+            result = utils.create_from_dict(client.ApiClient(), job_dict, True)
+            job_name = job_dict["metadata"]["name"]
+            logger.info(f"Created batch job '{job_name}' for {len(folders)} folders")
+            logger.debug(f"Job creation result: {result}")
+            return len(folders)
+        except Exception as api_ex:
+            logger.error(f"Failed to create Kubernetes job via API: {api_ex}")
+            raise
     except Exception as e:
         logger.error(f"Failed to create batch job: {e}")
         raise
@@ -488,6 +497,8 @@ def main() -> None:
     if changed_folders:
         logger.info(f"Creating batch job for {length_changed_folders} changed folders")
         processed_count = queue_batch_zip_job(changed_folders, export_only)
+        if processed_count:
+            logger.info(f"Successfully created {processed_count} jobs")
     else:
         logger.info("No changes detected, no batch job needed")
 
