@@ -19,5 +19,3 @@ RUN chmod +x /usr/local/bin/archive_one_folder.sh
 
 # Set up working directory
 WORKDIR /
-
-ENTRYPOINT ["/usr/local/bin/archive_one_folder.sh"]
