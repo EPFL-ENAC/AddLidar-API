@@ -558,6 +558,11 @@ def main() -> None:
                         row = cursor.fetchone()
                     if not row or row[0] != fp:
                         changed_count += 1
+                        jobs_queued += 1
+                        if max_jobs is not None and jobs_queued >= max_jobs:
+                            logger.info("Reached maximum number of archive jobs to run. Stopping scan.")
+                            max_jobs_reached = True
+                            break
                         logger.info(f"[Dry-run] Change detected in {rel}, no DB update or job queuing.")
 
             except Exception as e:
