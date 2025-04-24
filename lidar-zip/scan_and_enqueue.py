@@ -30,28 +30,27 @@ except ImportError:
     print("Error: kubernetes module not found. Run this script with 'uv run' to auto-install dependencies.")
     sys.exit(1)
 
-# Configure logging
-log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
+# Initial logger setup with default level (will be updated in main)
 logging.basicConfig(
-    level=getattr(logging, log_level, logging.INFO),
+    level=logging.INFO,  # Default level, will be overridden in main()
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[logging.StreamHandler()]
 )
 logger = logging.getLogger("lidar-archiver")
 
-# Constants from environment variables with defaults
-ORIG = os.environ.get("ORIGINAL_ROOT", "./original_root")
-ZIP = os.environ.get("ZIP_ROOT", "./zip_root")
-DB = os.environ.get("DB_PATH", "./state/archive.db")
+# Constants will be set in main() from arguments
+ORIG: str = ""
+ZIP: str = ""
+DB: str = ""
 
-# Configuration validation
-if not os.path.isdir(ORIG):
-    logger.warning(f"Original root directory '{ORIG}' does not exist, creating it...")
-    os.makedirs(ORIG, exist_ok=True)
-
-if not os.path.isdir(ZIP):
-    logger.warning(f"Zip root directory '{ZIP}' does not exist, creating it...")
-    os.makedirs(ZIP, exist_ok=True)
+# Configuration validation will be done in main() after parsing args
+# if not os.path.isdir(ORIG):
+#     logger.warning(f"Original root directory '{ORIG}' does not exist, creating it...")
+#     os.makedirs(ORIG, exist_ok=True)
+#
+# if not os.path.isdir(ZIP):
+#     logger.warning(f"Zip root directory '{ZIP}' does not exist, creating it...")
+#     os.makedirs(ZIP, exist_ok=True)
 
 def fingerprint(path: str) -> str:
     """
@@ -104,6 +103,8 @@ def fingerprint(path: str) -> str:
         raise
 
 def queue_zip_job_on_kube(rel_path: str, export_only: bool = False) -> None:
+    # Access global constants ORIG, ZIP, DB
+    global ORIG, ZIP, DB
     full_source = os.path.join(ORIG, rel_path)
     full_dest = os.path.join(ZIP, f"{rel_path}.tar.gz")
     name = f"zip-{uuid.uuid4().hex[:10]}"
@@ -164,6 +165,8 @@ def queue_zip_job_on_kube(rel_path: str, export_only: bool = False) -> None:
 
 
 def queue_zip_job_on_docker(rel_path: str, export_only: bool = False) -> None:
+    # Access global constants ORIG, ZIP, DB
+    global ORIG, ZIP, DB
     full_source = os.path.join(ORIG, rel_path)
     full_dest = os.path.join(ZIP, f"{rel_path}.tar.gz")
     name = f"zip-{uuid.uuid4().hex[:10]}"
@@ -209,6 +212,8 @@ def queue_zip_job_on_docker(rel_path: str, export_only: bool = False) -> None:
 
 
 def queue_zip_job_on_local(rel_path: str, export_only: bool = False) -> None:
+    # Access global constants ORIG, ZIP, DB
+    global ORIG, ZIP, DB
     full_source = os.path.join(ORIG, rel_path)
     full_dest = os.path.join(ZIP, f"{rel_path}.tar.gz")
     try:
@@ -245,6 +250,7 @@ def queue_zip_job_on_local(rel_path: str, export_only: bool = False) -> None:
             
             # Update the database after successful archive creation
             # Use a completely separate connection that will be properly closed
+            # Pass DB path explicitly
             db_manager = DatabaseManager(DB)
             try:
                 with db_manager.get_connection() as conn:
@@ -280,6 +286,7 @@ def queue_zip_job(rel_path: str, export_only: bool = False) -> None:
     """
     Queue a job to compress a directory based on the configured execution environment.
     """
+    # EXECUTION_ENV still comes from environment
     execution_env: str = os.environ.get("EXECUTION_ENV", "local").lower()
     logger.info(f"Queueing job for {rel_path} using environment: {execution_env}")
     if execution_env in ("kubernetes", "kube"):
@@ -399,8 +406,32 @@ def main() -> None:
     """
     Main function to scan directories and enqueue archive jobs.
     """
+    # Access global constants ORIG, ZIP, DB to modify them
+    global ORIG, ZIP, DB
+
     parser = argparse.ArgumentParser(
         description="LiDAR Archive Scanner and Job Enqueuer"
+    )
+    parser.add_argument(
+        "--original-root",
+        default="./original_root",
+        help="Root directory containing original LiDAR data"
+    )
+    parser.add_argument(
+        "--zip-root",
+        default="./zip_root",
+        help="Root directory where compressed archives will be stored"
+    )
+    parser.add_argument(
+        "--db-path",
+        default="./state/archive.db",
+        help="Path to the SQLite database file for tracking state"
+    )
+    parser.add_argument(
+        "--log-level",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        default="INFO",
+        help="Set logging level (default: INFO)"
     )
     parser.add_argument(
         "--dry-run",
@@ -408,36 +439,70 @@ def main() -> None:
         help="Check for changes without modifying database or queueing jobs"
     )
     parser.add_argument(
-        "--export_only",
+        "--export-only",  # Fixed hyphen instead of underscore for consistency
         action="store_true",
         help="Print job YAMLs/commands instead of creating them"
     )
     parser.add_argument(
-        "--number-of-archive-jobs-to-run",
+        "--max-jobs",  # Changed for clarity and consistency
         type=int,
         default=0,
-        help="Stop after the specified number of archive jobs have been queued"
+        help="Stop after the specified number of archive jobs have been queued (0 for unlimited)"
     )
     args = parser.parse_args()
+
+    # Set logging level from command line argument
+    log_level = args.log_level.upper()
+    logger.setLevel(getattr(logging, log_level))
+    logger.info(f"Log level set to: {log_level}")
+
+    # Assign parsed arguments to global constants
+    ORIG = args.original_root
+    ZIP = args.zip_root
+    DB = args.db_path
+
     dry_run: bool = args.dry_run
     export_only: bool = args.export_only
-    max_jobs: Optional[int] = args.number_of_archive_jobs_to_run if args.number_of_archive_jobs_to_run > 0 else None
+    max_jobs: Optional[int] = args.max_jobs if args.max_jobs > 0 else None
 
-    logger.info(f"Starting scan with dry-run={dry_run}, export_only={export_only}, max_jobs={max_jobs}")
+    # Configuration validation moved here
+    if not os.path.isdir(ORIG):
+        logger.warning(f"Original root directory '{ORIG}' does not exist, creating it...")
+        os.makedirs(ORIG, exist_ok=True)
 
-    try:
-        config.load_incluster_config()
-        logger.info("Loaded Kubernetes in-cluster config")
-    except Exception as e:
-        logger.warning(f"Failed to load in-cluster config, trying local: {e}")
+    if not os.path.isdir(ZIP):
+        logger.warning(f"Zip root directory '{ZIP}' does not exist, creating it...")
+        os.makedirs(ZIP, exist_ok=True)
+
+    # Ensure DB directory exists (DatabaseManager already does this, but good practice)
+    db_dir = os.path.dirname(DB)
+    if db_dir and not os.path.isdir(db_dir):
+         logger.warning(f"Database directory '{db_dir}' does not exist, creating it...")
+         os.makedirs(db_dir, exist_ok=True)
+
+
+    logger.info(f"Starting scan: ORIG='{ORIG}', ZIP='{ZIP}', DB='{DB}'")
+    logger.info(f"Options: dry-run={dry_run}, export_only={export_only}, max_jobs={max_jobs}")
+
+
+    # Load Kube config only if needed
+    execution_env = os.environ.get("EXECUTION_ENV", "local").lower()
+    if execution_env in ("kubernetes", "kube"):
         try:
-            config.load_kube_config()
-            logger.info("Loaded local Kubernetes config")
+            config.load_incluster_config()
+            logger.info("Loaded Kubernetes in-cluster config")
         except Exception as e:
-            logger.error(f"Failed to load any Kubernetes config: {e}")
-            raise
+            logger.warning(f"Failed to load in-cluster config, trying local: {e}")
+            try:
+                config.load_kube_config()
+                logger.info("Loaded local Kubernetes config")
+            except Exception as e:
+                logger.error(f"Failed to load any Kubernetes config: {e}")
+                # Decide if you want to exit or fallback based on your needs
+                # For now, we let it proceed, local/docker might still work
+                # sys.exit(1) # Uncomment to exit if Kube config fails when needed
 
-    db_manager = init_database(DB)
+    db_manager = init_database(DB) # DB path comes from args now
     logger.info(f"Initialized database at {DB}")
 
     processed_count = 0
