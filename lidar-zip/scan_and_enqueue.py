@@ -246,6 +246,7 @@ def collect_changed_folders(
             try:
                 logger.info(f"Processing directory: {rel}")
                 fp, size, count = get_directory_stats(src)
+                logger.info(f"Fingerprint: {fp}, Size: {size} KB, File Count: {count}")
 
                 with db_manager.get_connection() as conn:
                     cursor = conn.execute(
