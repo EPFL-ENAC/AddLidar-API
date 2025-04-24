@@ -333,16 +333,13 @@ class DatabaseManager:
         
     @classmethod
     def init_schema(cls, db_path: str) -> None:
-        """Initialize the database schema if not already done.
-        
-        This is a class method that should be called once during application startup.
-        
-        Args:
-            db_path: Path to SQLite database file
-        """
+        """Initialize the database schema if not already done."""
         if cls._schema_initialized:
             return
-            
+        
+        # Ensure directory exists before trying to connect
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        
         # Create a temporary connection just for schema initialization
         conn = sqlite3.connect(db_path, timeout=20.0)
         try:
@@ -502,6 +499,7 @@ def main() -> None:
                 # Exit if Kubernetes mode is requested but config loading fails
                 sys.exit(1)
 
+    logger.info(f"Initializing database... at path ${DB}")
     db_manager = init_database(DB) # DB path comes from args now
     logger.info(f"Initialized database at {DB}")
 
@@ -522,6 +520,7 @@ def main() -> None:
 
             processed_count += 1
             try:
+                logger.info(f"Processing directory: {rel}")
                 fp, size, count = get_directory_stats(src)
                 if not dry_run:
                     with db_manager.get_connection() as conn:
