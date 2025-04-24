@@ -20,6 +20,7 @@ import time
 import uuid
 import logging
 import sys
+import argparse
 from typing import Dict, List, Optional, Tuple
 
 try:
@@ -102,26 +103,17 @@ def fingerprint(path: str) -> str:
         logger.error(f"Failed to generate fingerprint for {path}: {e}")
         raise
 
-def queue_zip_job_on_kube(rel_path: str) -> None:
-    """
-    Create a Kubernetes job to compress a directory into a tar.gz archive.
-    
-    Args:
-        rel_path: Relative path of directory to compress
-    """
+def queue_zip_job_on_kube(rel_path: str, export_only: bool = False) -> None:
     full_source = os.path.join(ORIG, rel_path)
     full_dest = os.path.join(ZIP, f"{rel_path}.tar.gz")
     name = f"zip-{uuid.uuid4().hex[:10]}"
-    
     try:
-        # Create Kubernetes job specification with a post-completion script to update the database
         archive_script = (
             f"mkdir -p $(dirname '{full_dest}') && "
             f"tar -C '{ORIG}/{os.path.dirname(rel_path)}' "
             f"--use-compress-program=pigz -cf '{full_dest}' "
             f"'{os.path.basename(rel_path)}' && "
             f"echo 'Archive created successfully: {full_dest}' && "
-            # Add database update command after successful archive creation
             f"python3 -c \"import sqlite3, time; "
             f"db = sqlite3.connect('{DB}'); "
             f"db.execute('UPDATE folder_state SET archived_at = ? WHERE folder_key = ?', "
@@ -140,7 +132,7 @@ def queue_zip_job_on_kube(rel_path: str) -> None:
                         restart_policy="Never",
                         containers=[client.V1Container(
                             name="zip",
-                            image="python:3.9-alpine",  # Using Python image to enable database update
+                            image="python:3.9-alpine",
                             command=["/bin/sh", "-c", archive_script],
                             volume_mounts=[
                                 client.V1VolumeMount(mount_path=ORIG, name="orig", read_only=True),
@@ -157,31 +149,26 @@ def queue_zip_job_on_kube(rel_path: str) -> None:
                 )
             )
         )
-        
-        # Submit job to Kubernetes
-        client.BatchV1Api().create_namespaced_job("archives", job)
-        logger.info(f"Queued archive job '{name}' for directory: {rel_path}")
+        if export_only:
+            from kubernetes.client import ApiClient
+            job_yaml = ApiClient().sanitize_for_serialization(job)
+            import yaml
+            print(yaml.dump(job_yaml))
+            logger.info(f"Exported Kubernetes job YAML for directory: {rel_path}")
+        else:
+            client.BatchV1Api().create_namespaced_job("archives", job)
+            logger.info(f"Queued archive job '{name}' for directory: {rel_path}")
     except Exception as e:
         logger.error(f"Failed to create K8s job for {rel_path}: {e}")
         raise
 
 
-def queue_zip_job_on_docker(rel_path: str) -> None:
-    """
-    Create a Docker container to compress a directory into a tar.gz archive.
-    
-    Args:
-        rel_path: Relative path of directory to compress
-    """
+def queue_zip_job_on_docker(rel_path: str, export_only: bool = False) -> None:
     full_source = os.path.join(ORIG, rel_path)
     full_dest = os.path.join(ZIP, f"{rel_path}.tar.gz")
     name = f"zip-{uuid.uuid4().hex[:10]}"
-    
     try:
-        # Create directory for the archive if it doesn't exist
         os.makedirs(os.path.dirname(full_dest), exist_ok=True)
-        
-        # Build Docker run command with database update after successful archive
         docker_cmd = [
             "docker", "run", "--rm",
             "--name", name,
@@ -196,7 +183,6 @@ def queue_zip_job_on_docker(rel_path: str) -> None:
             f"--use-compress-program=pigz -cf '{full_dest}' "
             f"'{os.path.basename(rel_path)}' && "
             f"echo 'Archive created successfully: {full_dest}' && "
-            # Add database update command after successful archive creation
             f"python3 -c \"import sqlite3, time; "
             f"db = sqlite3.connect('{DB}'); "
             f"db.execute('UPDATE folder_state SET archived_at = ? WHERE folder_key = ?', "
@@ -207,42 +193,33 @@ def queue_zip_job_on_docker(rel_path: str) -> None:
             f"echo 'Failed to update database for {rel_path}'"
         ]
         
-        # Start Docker container in background
-        process = subprocess.Popen(
-            docker_cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
-        
-        logger.info(f"Launched Docker container '{name}' for directory: {rel_path}")
+        if export_only:
+            print("Docker command:", " ".join(docker_cmd))
+            logger.info(f"Exported Docker command for directory: {rel_path}")
+        else:
+            process = subprocess.Popen(
+                docker_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            logger.info(f"Launched Docker container '{name}' for directory: {rel_path}")
     except Exception as e:
         logger.error(f"Failed to create Docker job for {rel_path}: {e}")
         raise
 
 
-def queue_zip_job_on_local(rel_path: str) -> None:
-    """
-    Run a local process to compress a directory into a tar.gz archive.
-    
-    Args:
-        rel_path: Relative path of directory to compress
-    """
+def queue_zip_job_on_local(rel_path: str, export_only: bool = False) -> None:
     full_source = os.path.join(ORIG, rel_path)
     full_dest = os.path.join(ZIP, f"{rel_path}.tar.gz")
-    
     try:
-        # Create directory for the archive if it doesn't exist
         os.makedirs(os.path.dirname(full_dest), exist_ok=True)
-        
-        # Check if pigz is available, use gzip as fallback
         try:
-            subprocess.run(["which", "pigz"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(["which", "pigz"], check=True,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             compress_program = "pigz"
         except subprocess.CalledProcessError:
             logger.warning("pigz not found, falling back to gzip")
             compress_program = "gzip"
-        
-        # Build tar command
         tar_cmd = [
             "tar",
             "-C", f"{ORIG}/{os.path.dirname(rel_path)}",
@@ -250,7 +227,11 @@ def queue_zip_job_on_local(rel_path: str) -> None:
             "-cf", full_dest,
             os.path.basename(rel_path)
         ]
-        
+        if export_only:
+            print("Tar command:", " ".join(tar_cmd))
+            logger.info(f"Exported local tar command for directory: {rel_path}")
+            return
+
         # Execute the tar command and wait for it to complete
         try:
             result = subprocess.run(
@@ -289,29 +270,25 @@ def queue_zip_job_on_local(rel_path: str) -> None:
                 
         except subprocess.CalledProcessError as e:
             logger.error(f"Failed to create archive for {rel_path}: {e.stderr.decode('utf-8', errors='replace')}")
-            
     except Exception as e:
         logger.error(f"Failed to create local job for {rel_path}: {e}")
         raise
+        
+    logger.info(f"Completed local compression for directory: {rel_path}")
 
-
-def queue_zip_job(rel_path: str) -> None:
+def queue_zip_job(rel_path: str, export_only: bool = False) -> None:
     """
-    Queue a job to compress a directory based on configured execution environment.
-    
-    Args:
-        rel_path: Relative path of directory to compress
+    Queue a job to compress a directory based on the configured execution environment.
     """
-    # Get execution environment from environment variable, default to local
     execution_env: str = os.environ.get("EXECUTION_ENV", "local").lower()
     logger.info(f"Queueing job for {rel_path} using environment: {execution_env}")
-
     if execution_env in ("kubernetes", "kube"):
-        queue_zip_job_on_kube(rel_path)
+        queue_zip_job_on_kube(rel_path, export_only)
     elif execution_env == "docker":
-        queue_zip_job_on_docker(rel_path)
-    else:  # Default to local
-        queue_zip_job_on_local(rel_path)
+        queue_zip_job_on_docker(rel_path, export_only)
+    else:
+        queue_zip_job_on_local(rel_path, export_only)
+
 
 def get_directory_stats(path: str) -> Tuple[str, int, int]:
     """
@@ -422,8 +399,33 @@ def main() -> None:
     """
     Main function to scan directories and enqueue archive jobs.
     """
+    parser = argparse.ArgumentParser(
+        description="LiDAR Archive Scanner and Job Enqueuer"
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Check for changes without modifying database or queueing jobs"
+    )
+    parser.add_argument(
+        "--export_only",
+        action="store_true",
+        help="Print job YAMLs/commands instead of creating them"
+    )
+    parser.add_argument(
+        "--number-of-archive-jobs-to-run",
+        type=int,
+        default=0,
+        help="Stop after the specified number of archive jobs have been queued"
+    )
+    args = parser.parse_args()
+    dry_run: bool = args.dry_run
+    export_only: bool = args.export_only
+    max_jobs: Optional[int] = args.number_of_archive_jobs_to_run if args.number_of_archive_jobs_to_run > 0 else None
+
+    logger.info(f"Starting scan with dry-run={dry_run}, export_only={export_only}, max_jobs={max_jobs}")
+
     try:
-        # Load Kubernetes configuration
         config.load_incluster_config()
         logger.info("Loaded Kubernetes in-cluster config")
     except Exception as e:
@@ -434,45 +436,35 @@ def main() -> None:
         except Exception as e:
             logger.error(f"Failed to load any Kubernetes config: {e}")
             raise
-    
-    # Initialize database manager
+
     db_manager = init_database(DB)
     logger.info(f"Initialized database at {DB}")
-    
+
     processed_count = 0
     changed_count = 0
-    
-    try:
-        # Scan level1/level2 directories
-        for level1 in os.listdir(ORIG):
-            p1 = os.path.join(ORIG, level1)
-            if not os.path.isdir(p1):
-                continue
-                
-            for level2 in os.listdir(p1):
-                rel = os.path.join(level1, level2)
-                src = os.path.join(ORIG, rel)
-                if not os.path.isdir(src):
-                    continue
+    jobs_queued = 0
+    max_jobs_reached = False
 
-                processed_count += 1
-                
-                # Get directory statistics
-                try:
-                    fp, size, count = get_directory_stats(src)
-                    
-                    # Use a fresh connection for each operation to prevent locking
+    for level1 in os.listdir(ORIG):
+        p1 = os.path.join(ORIG, level1)
+        if not os.path.isdir(p1):
+            continue
+        for level2 in os.listdir(p1):
+            rel = os.path.join(level1, level2)
+            src = os.path.join(ORIG, rel)
+            if not os.path.isdir(src):
+                continue
+
+            processed_count += 1
+            try:
+                fp, size, count = get_directory_stats(src)
+                if not dry_run:
                     with db_manager.get_connection() as conn:
-                        # Check if directory changed since last scan
                         cursor = conn.execute("SELECT fp FROM folder_state WHERE folder_key=?", (rel,))
                         row = cursor.fetchone()
-                        
                         if not row or row[0] != fp:
-                            # Directory is new or changed - enqueue job
                             changed_count += 1
                             logger.info(f"Change detected in {rel}, enqueueing archive job")
-                            
-                            # Insert the new record or update the change status first
                             conn.execute(
                                 """INSERT INTO folder_state
                                 (folder_key, fp, size_kb, file_count, last_seen, archived_at, zip_path)
@@ -487,16 +479,31 @@ def main() -> None:
                                  os.path.join(ZIP, f"{rel}.tar.gz"))
                             )
                             conn.commit()
-                            
-                            # Now that the database record exists, queue the job
-                            queue_zip_job(rel)
-                except Exception as e:
-                    logger.error(f"Error processing directory {rel}: {e}")
-        
-        logger.info(f"Scan completed: processed {processed_count} directories, detected {changed_count} changes")
-    except Exception as e:
-        logger.error(f"Error during directory scan: {e}")
-        raise
+                else:
+                    # In dry-run mode, just log the detected change
+                    if not os.path.isdir(src):
+                        continue
+                    with db_manager.get_connection() as conn:
+                        cursor = conn.execute("SELECT fp FROM folder_state WHERE folder_key=?", (rel,))
+                        row = cursor.fetchone()
+                    if not row or row[0] != fp:
+                        changed_count += 1
+                        logger.info(f"[Dry-run] Change detected in {rel}, no DB update or job queuing.")
+
+                if not dry_run and (not os.environ.get("EXECUTION_ENV", "local").lower() == "local" or True):
+                    # Queue job only if not in dry-run
+                    queue_zip_job(rel, export_only)
+                    jobs_queued += 1
+                    if max_jobs is not None and jobs_queued >= max_jobs:
+                        logger.info("Reached maximum number of archive jobs to run. Stopping scan.")
+                        max_jobs_reached = True
+                        break
+            except Exception as e:
+                logger.error(f"Error processing directory {rel}: {e}")
+        if max_jobs_reached:
+            break
+
+    logger.info(f"Scan completed: processed {processed_count} directories, detected {changed_count} changes")
 
 if __name__ == "__main__":
     main()
