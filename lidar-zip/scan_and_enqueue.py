@@ -42,15 +42,9 @@ logger = logging.getLogger("lidar-archiver")
 ORIG: str = ""
 ZIP: str = ""
 DB: str = ""
+# We'll store parsed args globally so they can be accessed from other functions
+args = None
 
-# Configuration validation will be done in main() after parsing args
-# if not os.path.isdir(ORIG):
-#     logger.warning(f"Original root directory '{ORIG}' does not exist, creating it...")
-#     os.makedirs(ORIG, exist_ok=True)
-#
-# if not os.path.isdir(ZIP):
-#     logger.warning(f"Zip root directory '{ZIP}' does not exist, creating it...")
-#     os.makedirs(ZIP, exist_ok=True)
 
 def fingerprint(path: str) -> str:
     """
@@ -286,8 +280,10 @@ def queue_zip_job(rel_path: str, export_only: bool = False) -> None:
     """
     Queue a job to compress a directory based on the configured execution environment.
     """
-    # EXECUTION_ENV still comes from environment
-    execution_env: str = os.environ.get("EXECUTION_ENV", "local").lower()
+    # Use the execution_env from command-line arguments instead of environment variable
+    global args
+    execution_env: str = args.execution_env.lower()
+    
     logger.info(f"Queueing job for {rel_path} using environment: {execution_env}")
     if execution_env in ("kubernetes", "kube"):
         queue_zip_job_on_kube(rel_path, export_only)
@@ -406,8 +402,8 @@ def main() -> None:
     """
     Main function to scan directories and enqueue archive jobs.
     """
-    # Access global constants ORIG, ZIP, DB to modify them
-    global ORIG, ZIP, DB
+    # Access global constants and args to modify them
+    global ORIG, ZIP, DB, args
 
     parser = argparse.ArgumentParser(
         description="LiDAR Archive Scanner and Job Enqueuer"
@@ -434,17 +430,23 @@ def main() -> None:
         help="Set logging level (default: INFO)"
     )
     parser.add_argument(
+        "--execution-env",
+        choices=["local", "docker", "kubernetes", "kube"],
+        default="local",
+        help="Execution environment for archive jobs (default: local)"
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Check for changes without modifying database or queueing jobs"
     )
     parser.add_argument(
-        "--export-only",  # Fixed hyphen instead of underscore for consistency
+        "--export-only",
         action="store_true",
         help="Print job YAMLs/commands instead of creating them"
     )
     parser.add_argument(
-        "--max-jobs",  # Changed for clarity and consistency
+        "--max-jobs",
         type=int,
         default=0,
         help="Stop after the specified number of archive jobs have been queued (0 for unlimited)"
@@ -460,6 +462,7 @@ def main() -> None:
     ORIG = args.original_root
     ZIP = args.zip_root
     DB = args.db_path
+    execution_env = args.execution_env.lower()
 
     dry_run: bool = args.dry_run
     export_only: bool = args.export_only
@@ -474,33 +477,30 @@ def main() -> None:
         logger.warning(f"Zip root directory '{ZIP}' does not exist, creating it...")
         os.makedirs(ZIP, exist_ok=True)
 
-    # Ensure DB directory exists (DatabaseManager already does this, but good practice)
+    # Ensure DB directory exists
     db_dir = os.path.dirname(DB)
     if db_dir and not os.path.isdir(db_dir):
          logger.warning(f"Database directory '{db_dir}' does not exist, creating it...")
          os.makedirs(db_dir, exist_ok=True)
 
-
     logger.info(f"Starting scan: ORIG='{ORIG}', ZIP='{ZIP}', DB='{DB}'")
-    logger.info(f"Options: dry-run={dry_run}, export_only={export_only}, max_jobs={max_jobs}")
+    logger.info(f"Options: execution_env='{execution_env}', log_level='{log_level}', "
+                f"dry-run={dry_run}, export_only={export_only}, max_jobs={max_jobs}")
 
-
-    # Load Kube config only if needed
-    execution_env = os.environ.get("EXECUTION_ENV", "local").lower()
+    # Load Kube config only if needed - now using the command line argument
     if execution_env in ("kubernetes", "kube"):
         try:
             config.load_incluster_config()
             logger.info("Loaded Kubernetes in-cluster config")
-        except Exception as e:
-            logger.warning(f"Failed to load in-cluster config, trying local: {e}")
+        except config.ConfigException:
+            logger.warning("Failed to load in-cluster config, trying local kube config")
             try:
                 config.load_kube_config()
                 logger.info("Loaded local Kubernetes config")
             except Exception as e:
                 logger.error(f"Failed to load any Kubernetes config: {e}")
-                # Decide if you want to exit or fallback based on your needs
-                # For now, we let it proceed, local/docker might still work
-                # sys.exit(1) # Uncomment to exit if Kube config fails when needed
+                # Exit if Kubernetes mode is requested but config loading fails
+                sys.exit(1)
 
     db_manager = init_database(DB) # DB path comes from args now
     logger.info(f"Initialized database at {DB}")
@@ -544,6 +544,12 @@ def main() -> None:
                                  os.path.join(ZIP, f"{rel}.tar.gz"))
                             )
                             conn.commit()
+                            queue_zip_job(rel, export_only)
+                            jobs_queued += 1
+                            if max_jobs is not None and jobs_queued >= max_jobs:
+                                logger.info("Reached maximum number of archive jobs to run. Stopping scan.")
+                                max_jobs_reached = True
+                                break
                 else:
                     # In dry-run mode, just log the detected change
                     if not os.path.isdir(src):
@@ -555,14 +561,6 @@ def main() -> None:
                         changed_count += 1
                         logger.info(f"[Dry-run] Change detected in {rel}, no DB update or job queuing.")
 
-                if not dry_run and (not os.environ.get("EXECUTION_ENV", "local").lower() == "local" or True):
-                    # Queue job only if not in dry-run
-                    queue_zip_job(rel, export_only)
-                    jobs_queued += 1
-                    if max_jobs is not None and jobs_queued >= max_jobs:
-                        logger.info("Reached maximum number of archive jobs to run. Stopping scan.")
-                        max_jobs_reached = True
-                        break
             except Exception as e:
                 logger.error(f"Error processing directory {rel}: {e}")
         if max_jobs_reached:
