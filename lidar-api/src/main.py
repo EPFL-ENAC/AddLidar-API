@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request
 from src.api.routes import router
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
+from src.api.sqlite import router as sqlite_router
 import logging
 
 app = FastAPI()
@@ -37,3 +38,4 @@ async def get_index():
 
 
 app.include_router(router)
+app.include_router(sqlite_router, tags=["sqlite"])
