@@ -1,0 +1,502 @@
+[
+    {
+        "folder_path": "lvl1_01/lvl2_09",
+        "folder_size_kb": 672,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_01/lvl2_09.tar.gz",
+        "archive_mod_time_epoch": 1745418540,
+        "archive_mod_time": "2025-04-23 14:29:00",
+        "folder_mod_time_epoch": 1745418540,
+        "folder_mod_time": "2025-04-23 14:29:00"
+    },
+    {
+        "folder_path": "lvl1_01/lvl2_08",
+        "folder_size_kb": 664,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_01/lvl2_08.tar.gz",
+        "archive_mod_time_epoch": 1745418540,
+        "archive_mod_time": "2025-04-23 14:29:00",
+        "folder_mod_time_epoch": 1745418540,
+        "folder_mod_time": "2025-04-23 14:29:00"
+    },
+    {
+        "folder_path": "lvl1_01/lvl2_06",
+        "folder_size_kb": 640,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_01/lvl2_06.tar.gz",
+        "archive_mod_time_epoch": 1745418540,
+        "archive_mod_time": "2025-04-23 14:29:00",
+        "folder_mod_time_epoch": 1745418540,
+        "folder_mod_time": "2025-04-23 14:29:00"
+    },
+    {
+        "folder_path": "lvl1_01/lvl2_01",
+        "folder_size_kb": 632,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_01/lvl2_01.tar.gz",
+        "archive_mod_time_epoch": 1745418540,
+        "archive_mod_time": "2025-04-23 14:29:00",
+        "folder_mod_time_epoch": 1745418540,
+        "folder_mod_time": "2025-04-23 14:29:00"
+    },
+    {
+        "folder_path": "lvl1_01/lvl2_04",
+        "folder_size_kb": 668,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_01/lvl2_04.tar.gz",
+        "archive_mod_time_epoch": 1745418540,
+        "archive_mod_time": "2025-04-23 14:29:00",
+        "folder_mod_time_epoch": 1745418540,
+        "folder_mod_time": "2025-04-23 14:29:00"
+    },
+    {
+        "folder_path": "lvl1_01/lvl2_03",
+        "folder_size_kb": 656,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_01/lvl2_03.tar.gz",
+        "archive_mod_time_epoch": 1745418540,
+        "archive_mod_time": "2025-04-23 14:29:00",
+        "folder_mod_time_epoch": 1745418540,
+        "folder_mod_time": "2025-04-23 14:29:00"
+    },
+    {
+        "folder_path": "lvl1_01/lvl2_02",
+        "folder_size_kb": 616,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_01/lvl2_02.tar.gz",
+        "archive_mod_time_epoch": 1745418540,
+        "archive_mod_time": "2025-04-23 14:29:00",
+        "folder_mod_time_epoch": 1745418540,
+        "folder_mod_time": "2025-04-23 14:29:00"
+    },
+    {
+        "folder_path": "lvl1_01/lvl2_05",
+        "folder_size_kb": 672,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_01/lvl2_05.tar.gz",
+        "archive_mod_time_epoch": 1745418540,
+        "archive_mod_time": "2025-04-23 14:29:00",
+        "folder_mod_time_epoch": 1745418540,
+        "folder_mod_time": "2025-04-23 14:29:00"
+    },
+    {
+        "folder_path": "lvl1_01/lvl2_10",
+        "folder_size_kb": 692,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_01/lvl2_10.tar.gz",
+        "archive_mod_time_epoch": 1745418540,
+        "archive_mod_time": "2025-04-23 14:29:00",
+        "folder_mod_time_epoch": 1745418540,
+        "folder_mod_time": "2025-04-23 14:29:00"
+    },
+    {
+        "folder_path": "lvl1_02/lvl2_04",
+        "folder_size_kb": 712,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_02/lvl2_04.tar.gz",
+        "archive_mod_time_epoch": 1745418539,
+        "archive_mod_time": "2025-04-23 14:28:59",
+        "folder_mod_time_epoch": 1745418539,
+        "folder_mod_time": "2025-04-23 14:28:59"
+    },
+    {
+        "folder_path": "lvl1_02/lvl2_03",
+        "folder_size_kb": 676,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_02/lvl2_03.tar.gz",
+        "archive_mod_time_epoch": 1745418539,
+        "archive_mod_time": "2025-04-23 14:28:59",
+        "folder_mod_time_epoch": 1745418539,
+        "folder_mod_time": "2025-04-23 14:28:59"
+    },
+    {
+        "folder_path": "lvl1_02/lvl2_02",
+        "folder_size_kb": 696,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_02/lvl2_02.tar.gz",
+        "archive_mod_time_epoch": 1745418539,
+        "archive_mod_time": "2025-04-23 14:28:59",
+        "folder_mod_time_epoch": 1745418539,
+        "folder_mod_time": "2025-04-23 14:28:59"
+    },
+    {
+        "folder_path": "lvl1_02/lvl2_05",
+        "folder_size_kb": 720,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_02/lvl2_05.tar.gz",
+        "archive_mod_time_epoch": 1745418539,
+        "archive_mod_time": "2025-04-23 14:28:59",
+        "folder_mod_time_epoch": 1745418539,
+        "folder_mod_time": "2025-04-23 14:28:59"
+    },
+    {
+        "folder_path": "lvl1_02/lvl2_10",
+        "folder_size_kb": 660,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_02/lvl2_10.tar.gz",
+        "archive_mod_time_epoch": 1745418539,
+        "archive_mod_time": "2025-04-23 14:28:59",
+        "folder_mod_time_epoch": 1745418539,
+        "folder_mod_time": "2025-04-23 14:28:59"
+    },
+    {
+        "folder_path": "lvl1_05/lvl2_07",
+        "folder_size_kb": 520,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_05/lvl2_07.tar.gz",
+        "archive_mod_time_epoch": 1745418539,
+        "archive_mod_time": "2025-04-23 14:28:59",
+        "folder_mod_time_epoch": 1745418539,
+        "folder_mod_time": "2025-04-23 14:28:59"
+    },
+    {
+        "folder_path": "lvl1_05/lvl2_09",
+        "folder_size_kb": 528,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_05/lvl2_09.tar.gz",
+        "archive_mod_time_epoch": 1745418539,
+        "archive_mod_time": "2025-04-23 14:28:59",
+        "folder_mod_time_epoch": 1745418539,
+        "folder_mod_time": "2025-04-23 14:28:59"
+    },
+    {
+        "folder_path": "lvl1_05/lvl2_08",
+        "folder_size_kb": 532,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_05/lvl2_08.tar.gz",
+        "archive_mod_time_epoch": 1745418539,
+        "archive_mod_time": "2025-04-23 14:28:59",
+        "folder_mod_time_epoch": 1745418539,
+        "folder_mod_time": "2025-04-23 14:28:59"
+    },
+    {
+        "folder_path": "lvl1_05/lvl2_06",
+        "folder_size_kb": 524,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_05/lvl2_06.tar.gz",
+        "archive_mod_time_epoch": 1745418539,
+        "archive_mod_time": "2025-04-23 14:28:59",
+        "folder_mod_time_epoch": 1745418539,
+        "folder_mod_time": "2025-04-23 14:28:59"
+    },
+    {
+        "folder_path": "lvl1_05/lvl2_01",
+        "folder_size_kb": 504,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_05/lvl2_01.tar.gz",
+        "archive_mod_time_epoch": 1745418539,
+        "archive_mod_time": "2025-04-23 14:28:59",
+        "folder_mod_time_epoch": 1745418539,
+        "folder_mod_time": "2025-04-23 14:28:59"
+    },
+    {
+        "folder_path": "lvl1_05/lvl2_04",
+        "folder_size_kb": 524,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_05/lvl2_04.tar.gz",
+        "archive_mod_time_epoch": 1745418539,
+        "archive_mod_time": "2025-04-23 14:28:59",
+        "folder_mod_time_epoch": 1745418539,
+        "folder_mod_time": "2025-04-23 14:28:59"
+    },
+    {
+        "folder_path": "lvl1_05/lvl2_03",
+        "folder_size_kb": 516,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_05/lvl2_03.tar.gz",
+        "archive_mod_time_epoch": 1745418539,
+        "archive_mod_time": "2025-04-23 14:28:59",
+        "folder_mod_time_epoch": 1745418539,
+        "folder_mod_time": "2025-04-23 14:28:59"
+    },
+    {
+        "folder_path": "lvl1_05/lvl2_02",
+        "folder_size_kb": 500,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_05/lvl2_02.tar.gz",
+        "archive_mod_time_epoch": 1745418539,
+        "archive_mod_time": "2025-04-23 14:28:59",
+        "folder_mod_time_epoch": 1745418539,
+        "folder_mod_time": "2025-04-23 14:28:59"
+    },
+    {
+        "folder_path": "lvl1_05/lvl2_05",
+        "folder_size_kb": 496,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_05/lvl2_05.tar.gz",
+        "archive_mod_time_epoch": 1745418539,
+        "archive_mod_time": "2025-04-23 14:28:59",
+        "folder_mod_time_epoch": 1745418539,
+        "folder_mod_time": "2025-04-23 14:28:59"
+    },
+    {
+        "folder_path": "lvl1_05/lvl2_10",
+        "folder_size_kb": 552,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_05/lvl2_10.tar.gz",
+        "archive_mod_time_epoch": 1745418539,
+        "archive_mod_time": "2025-04-23 14:28:59",
+        "folder_mod_time_epoch": 1745418539,
+        "folder_mod_time": "2025-04-23 14:28:59"
+    },
+    {
+        "folder_path": "lvl1_01/lvl2_07",
+        "folder_size_kb": 668,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_01/lvl2_07.tar.gz",
+        "archive_mod_time_epoch": 1745418540,
+        "archive_mod_time": "2025-04-23 14:29:00",
+        "folder_mod_time_epoch": 1745418539,
+        "folder_mod_time": "2025-04-23 14:28:59"
+    },
+    {
+        "folder_path": "lvl1_03/lvl2_07",
+        "folder_size_kb": 460,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_03/lvl2_07.tar.gz",
+        "archive_mod_time_epoch": 1745418538,
+        "archive_mod_time": "2025-04-23 14:28:58",
+        "folder_mod_time_epoch": 1745418538,
+        "folder_mod_time": "2025-04-23 14:28:58"
+    },
+    {
+        "folder_path": "lvl1_03/lvl2_09",
+        "folder_size_kb": 636,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_03/lvl2_09.tar.gz",
+        "archive_mod_time_epoch": 1745418538,
+        "archive_mod_time": "2025-04-23 14:28:58",
+        "folder_mod_time_epoch": 1745418538,
+        "folder_mod_time": "2025-04-23 14:28:58"
+    },
+    {
+        "folder_path": "lvl1_03/lvl2_08",
+        "folder_size_kb": 528,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_03/lvl2_08.tar.gz",
+        "archive_mod_time_epoch": 1745418538,
+        "archive_mod_time": "2025-04-23 14:28:58",
+        "folder_mod_time_epoch": 1745418538,
+        "folder_mod_time": "2025-04-23 14:28:58"
+    },
+    {
+        "folder_path": "lvl1_03/lvl2_06",
+        "folder_size_kb": 752,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_03/lvl2_06.tar.gz",
+        "archive_mod_time_epoch": 1745418538,
+        "archive_mod_time": "2025-04-23 14:28:58",
+        "folder_mod_time_epoch": 1745418538,
+        "folder_mod_time": "2025-04-23 14:28:58"
+    },
+    {
+        "folder_path": "lvl1_03/lvl2_01",
+        "folder_size_kb": 676,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_03/lvl2_01.tar.gz",
+        "archive_mod_time_epoch": 1745418538,
+        "archive_mod_time": "2025-04-23 14:28:58",
+        "folder_mod_time_epoch": 1745418538,
+        "folder_mod_time": "2025-04-23 14:28:58"
+    },
+    {
+        "folder_path": "lvl1_03/lvl2_04",
+        "folder_size_kb": 764,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_03/lvl2_04.tar.gz",
+        "archive_mod_time_epoch": 1745418538,
+        "archive_mod_time": "2025-04-23 14:28:58",
+        "folder_mod_time_epoch": 1745418538,
+        "folder_mod_time": "2025-04-23 14:28:58"
+    },
+    {
+        "folder_path": "lvl1_03/lvl2_03",
+        "folder_size_kb": 536,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_03/lvl2_03.tar.gz",
+        "archive_mod_time_epoch": 1745418538,
+        "archive_mod_time": "2025-04-23 14:28:58",
+        "folder_mod_time_epoch": 1745418538,
+        "folder_mod_time": "2025-04-23 14:28:58"
+    },
+    {
+        "folder_path": "lvl1_03/lvl2_02",
+        "folder_size_kb": 756,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_03/lvl2_02.tar.gz",
+        "archive_mod_time_epoch": 1745418538,
+        "archive_mod_time": "2025-04-23 14:28:58",
+        "folder_mod_time_epoch": 1745418538,
+        "folder_mod_time": "2025-04-23 14:28:58"
+    },
+    {
+        "folder_path": "lvl1_03/lvl2_05",
+        "folder_size_kb": 484,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_03/lvl2_05.tar.gz",
+        "archive_mod_time_epoch": 1745418538,
+        "archive_mod_time": "2025-04-23 14:28:58",
+        "folder_mod_time_epoch": 1745418538,
+        "folder_mod_time": "2025-04-23 14:28:58"
+    },
+    {
+        "folder_path": "lvl1_03/lvl2_10",
+        "folder_size_kb": 480,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_03/lvl2_10.tar.gz",
+        "archive_mod_time_epoch": 1745418538,
+        "archive_mod_time": "2025-04-23 14:28:58",
+        "folder_mod_time_epoch": 1745418538,
+        "folder_mod_time": "2025-04-23 14:28:58"
+    },
+    {
+        "folder_path": "lvl1_02/lvl2_07",
+        "folder_size_kb": 720,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_02/lvl2_07.tar.gz",
+        "archive_mod_time_epoch": 1745418538,
+        "archive_mod_time": "2025-04-23 14:28:58",
+        "folder_mod_time_epoch": 1745418538,
+        "folder_mod_time": "2025-04-23 14:28:58"
+    },
+    {
+        "folder_path": "lvl1_02/lvl2_09",
+        "folder_size_kb": 752,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_02/lvl2_09.tar.gz",
+        "archive_mod_time_epoch": 1745418538,
+        "archive_mod_time": "2025-04-23 14:28:58",
+        "folder_mod_time_epoch": 1745418538,
+        "folder_mod_time": "2025-04-23 14:28:58"
+    },
+    {
+        "folder_path": "lvl1_02/lvl2_08",
+        "folder_size_kb": 720,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_02/lvl2_08.tar.gz",
+        "archive_mod_time_epoch": 1745418538,
+        "archive_mod_time": "2025-04-23 14:28:58",
+        "folder_mod_time_epoch": 1745418538,
+        "folder_mod_time": "2025-04-23 14:28:58"
+    },
+    {
+        "folder_path": "lvl1_02/lvl2_06",
+        "folder_size_kb": 720,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_02/lvl2_06.tar.gz",
+        "archive_mod_time_epoch": 1745418538,
+        "archive_mod_time": "2025-04-23 14:28:58",
+        "folder_mod_time_epoch": 1745418538,
+        "folder_mod_time": "2025-04-23 14:28:58"
+    },
+    {
+        "folder_path": "lvl1_02/lvl2_01",
+        "folder_size_kb": 676,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_02/lvl2_01.tar.gz",
+        "archive_mod_time_epoch": 1745418539,
+        "archive_mod_time": "2025-04-23 14:28:59",
+        "folder_mod_time_epoch": 1745418538,
+        "folder_mod_time": "2025-04-23 14:28:58"
+    },
+    {
+        "folder_path": "lvl1_04/lvl2_07",
+        "folder_size_kb": 480,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_04/lvl2_07.tar.gz",
+        "archive_mod_time_epoch": 1745418537,
+        "archive_mod_time": "2025-04-23 14:28:57",
+        "folder_mod_time_epoch": 1745418537,
+        "folder_mod_time": "2025-04-23 14:28:57"
+    },
+    {
+        "folder_path": "lvl1_04/lvl2_09",
+        "folder_size_kb": 484,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_04/lvl2_09.tar.gz",
+        "archive_mod_time_epoch": 1745418537,
+        "archive_mod_time": "2025-04-23 14:28:57",
+        "folder_mod_time_epoch": 1745418537,
+        "folder_mod_time": "2025-04-23 14:28:57"
+    },
+    {
+        "folder_path": "lvl1_04/lvl2_08",
+        "folder_size_kb": 460,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_04/lvl2_08.tar.gz",
+        "archive_mod_time_epoch": 1745418537,
+        "archive_mod_time": "2025-04-23 14:28:57",
+        "folder_mod_time_epoch": 1745418537,
+        "folder_mod_time": "2025-04-23 14:28:57"
+    },
+    {
+        "folder_path": "lvl1_04/lvl2_06",
+        "folder_size_kb": 472,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_04/lvl2_06.tar.gz",
+        "archive_mod_time_epoch": 1745418537,
+        "archive_mod_time": "2025-04-23 14:28:57",
+        "folder_mod_time_epoch": 1745418537,
+        "folder_mod_time": "2025-04-23 14:28:57"
+    },
+    {
+        "folder_path": "lvl1_04/lvl2_01",
+        "folder_size_kb": 532,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_04/lvl2_01.tar.gz",
+        "archive_mod_time_epoch": 1745418537,
+        "archive_mod_time": "2025-04-23 14:28:57",
+        "folder_mod_time_epoch": 1745418537,
+        "folder_mod_time": "2025-04-23 14:28:57"
+    },
+    {
+        "folder_path": "lvl1_04/lvl2_04",
+        "folder_size_kb": 460,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_04/lvl2_04.tar.gz",
+        "archive_mod_time_epoch": 1745418537,
+        "archive_mod_time": "2025-04-23 14:28:57",
+        "folder_mod_time_epoch": 1745418537,
+        "folder_mod_time": "2025-04-23 14:28:57"
+    },
+    {
+        "folder_path": "lvl1_04/lvl2_03",
+        "folder_size_kb": 480,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_04/lvl2_03.tar.gz",
+        "archive_mod_time_epoch": 1745418537,
+        "archive_mod_time": "2025-04-23 14:28:57",
+        "folder_mod_time_epoch": 1745418537,
+        "folder_mod_time": "2025-04-23 14:28:57"
+    },
+    {
+        "folder_path": "lvl1_04/lvl2_02",
+        "folder_size_kb": 448,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_04/lvl2_02.tar.gz",
+        "archive_mod_time_epoch": 1745418537,
+        "archive_mod_time": "2025-04-23 14:28:57",
+        "folder_mod_time_epoch": 1745418537,
+        "folder_mod_time": "2025-04-23 14:28:57"
+    },
+    {
+        "folder_path": "lvl1_04/lvl2_05",
+        "folder_size_kb": 480,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_04/lvl2_05.tar.gz",
+        "archive_mod_time_epoch": 1745418537,
+        "archive_mod_time": "2025-04-23 14:28:57",
+        "folder_mod_time_epoch": 1745418537,
+        "folder_mod_time": "2025-04-23 14:28:57"
+    },
+    {
+        "folder_path": "lvl1_04/lvl2_10",
+        "folder_size_kb": 516,
+        "folder_file_count": 36,
+        "archive_path": "./zip_root/lvl1_04/lvl2_10.tar.gz",
+        "archive_mod_time_epoch": 1745418538,
+        "archive_mod_time": "2025-04-23 14:28:58",
+        "folder_mod_time_epoch": 1745418537,
+        "folder_mod_time": "2025-04-23 14:28:57"
+    }
+]
