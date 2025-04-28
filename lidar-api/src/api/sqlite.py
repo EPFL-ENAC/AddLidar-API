@@ -21,17 +21,21 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
+
 # Pydantic models for responses
 class TableInfo(BaseModel):
     name: str
-    
+
+
 class ColumnInfo(BaseModel):
     name: str
     type: str
-    
+
+
 class QueryResult(BaseModel):
     data: List[Dict[str, Any]]
     count: int
+
 
 # Database connection helper
 def get_db_connection():
@@ -43,7 +47,10 @@ def get_db_connection():
         return conn
     except sqlite3.Error as e:
         logger.error(f"Database connection error: {e}")
-        raise HTTPException(status_code=500, detail=f"Database connection failed: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Database connection failed: {str(e)}"
+        )
+
 
 @router.get("/tables", response_model=List[TableInfo])
 async def get_tables():
@@ -51,17 +58,18 @@ async def get_tables():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        
+
         # Query to get all tables
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
         tables = cursor.fetchall()
-        
+
         conn.close()
-        
-        return [TableInfo(name=table['name']) for table in tables]
+
+        return [TableInfo(name=table["name"]) for table in tables]
     except Exception as e:
         logger.error(f"Error fetching tables: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch tables: {str(e)}")
+
 
 @router.get("/schema/{table_name}", response_model=List[ColumnInfo])
 async def get_table_schema(table_name: str):
@@ -69,26 +77,32 @@ async def get_table_schema(table_name: str):
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        
+
         # Check if table exists
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?;", (table_name,))
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?;",
+            (table_name,),
+        )
         if not cursor.fetchone():
             conn.close()
-            raise HTTPException(status_code=404, detail=f"Table '{table_name}' not found")
-        
+            raise HTTPException(
+                status_code=404, detail=f"Table '{table_name}' not found"
+            )
+
         # Get table schema
         cursor.execute(f"PRAGMA table_info({table_name});")
         columns = cursor.fetchall()
-        
+
         conn.close()
-        
-        return [ColumnInfo(name=col['name'], type=col['type']) for col in columns]
+
+        return [ColumnInfo(name=col["name"], type=col["type"]) for col in columns]
     except sqlite3.Error as e:
         logger.error(f"Database error: {e}")
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
     except Exception as e:
         logger.error(f"Error fetching schema: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch schema: {str(e)}")
+
 
 @router.get("/query/{table_name}", response_model=QueryResult)
 async def query_table(
@@ -102,40 +116,45 @@ async def query_table(
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        
+
         # Check if table exists
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?;", (table_name,))
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?;",
+            (table_name,),
+        )
         if not cursor.fetchone():
             conn.close()
-            raise HTTPException(status_code=404, detail=f"Table '{table_name}' not found")
-        
+            raise HTTPException(
+                status_code=404, detail=f"Table '{table_name}' not found"
+            )
+
         # Build query
         selected_columns = "*"
         if columns:
             selected_columns = columns
-        
+
         query = f"SELECT {selected_columns} FROM {table_name}"
         count_query = f"SELECT COUNT(*) as count FROM {table_name}"
-        
+
         if where:
             query += f" WHERE {where}"
             count_query += f" WHERE {where}"
-            
+
         query += f" LIMIT {limit} OFFSET {offset}"
-        
+
         # Execute query
         cursor.execute(query)
         rows = cursor.fetchall()
-        
+
         # Get total count
         cursor.execute(count_query)
-        count = cursor.fetchone()['count']
-        
+        count = cursor.fetchone()["count"]
+
         conn.close()
-        
+
         # Convert rows to list of dicts
         data = [dict(row) for row in rows]
-        
+
         return QueryResult(data=data, count=count)
     except sqlite3.Error as e:
         logger.error(f"Database error: {e}")
@@ -143,6 +162,7 @@ async def query_table(
     except Exception as e:
         logger.error(f"Error querying table: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to query table: {str(e)}")
+
 
 @router.get("/folder_state", response_model=QueryResult)
 async def get_folder_state(
@@ -153,7 +173,7 @@ async def get_folder_state(
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        
+
         # Query matching the export.sh format
         query = """
         SELECT
@@ -169,24 +189,26 @@ async def get_folder_state(
         ORDER BY last_seen DESC
         LIMIT ? OFFSET ?
         """
-        
+
         # Execute query
         cursor.execute(query, (limit, offset))
         rows = cursor.fetchall()
-        
+
         # Get total count
         cursor.execute("SELECT COUNT(*) as count FROM folder_state")
-        count = cursor.fetchone()['count']
-        
+        count = cursor.fetchone()["count"]
+
         conn.close()
-        
+
         # Convert rows to list of dicts
         data = [dict(row) for row in rows]
-        
+
         return QueryResult(data=data, count=count)
     except sqlite3.Error as e:
         logger.error(f"Database error: {e}")
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
     except Exception as e:
         logger.error(f"Error querying folder state: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to query folder state: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to query folder state: {str(e)}"
+        )
