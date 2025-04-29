@@ -15,7 +15,5 @@ class Settings(BaseSettings):
     JOB_TIMEOUT: int = 300  # Timeout in seconds for job completion
     DEFAULT_OUTPUT_ROOT: str = "/output"  # Default root path based on environment
 
-    model_config = SettingsConfigDict(env_file=".env")
-
 
 settings = Settings()
