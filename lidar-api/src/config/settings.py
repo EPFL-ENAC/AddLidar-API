@@ -5,8 +5,10 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     IMAGE_NAME: str = "ghcr.io/epfl-enac/lidardatamanager"
     IMAGE_TAG: str = "latest"
+    PATH_PREFIX: str = "/api"
     NAMESPACE: str = "epfl-cryos-addlidar-potree-dev"
     MOUNT_PATH: str = "/data"
+    DATABASE_PATH: str = "state/archive.db"  # Default path for SQLite database
     OUTPUT_PATH: str = "/output"
     PVC_OUTPUT_NAME: str = "lidar-data-output-pvc"  # Default to our created PVC
     PVC_NAME: str = "lidar-data-pvc"  # Default to our created PVC
