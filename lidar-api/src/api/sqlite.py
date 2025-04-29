@@ -223,4 +223,6 @@ async def get_settings():
         return {"settings": settings_dict}
     except Exception as e:
         logger.error(f"Error fetching settings: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to fetch settings: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch settings: {str(e)}"
+        )
