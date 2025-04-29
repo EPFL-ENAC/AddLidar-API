@@ -212,3 +212,15 @@ async def get_folder_state(
         raise HTTPException(
             status_code=500, detail=f"Failed to query folder state: {str(e)}"
         )
+
+
+@router.get("/settings", response_model=Dict[str, Any])
+async def get_settings():
+    """Get current settings"""
+    try:
+        # Convert settings to dictionary
+        settings_dict = settings.model_dump()
+        return {"settings": settings_dict}
+    except Exception as e:
+        logger.error(f"Error fetching settings: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch settings: {str(e)}")

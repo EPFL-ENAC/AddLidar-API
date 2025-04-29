@@ -3,9 +3,11 @@ from src.api.routes import router
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from src.api.sqlite import router as sqlite_router
+from src.config.settings import settings
 import logging
 
-app = FastAPI()
+
+app = FastAPI(root_path=settings.PATH_PREFIX)
 
 logging.basicConfig(
     level=logging.INFO,
