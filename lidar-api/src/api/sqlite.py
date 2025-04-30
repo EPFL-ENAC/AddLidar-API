@@ -214,6 +214,66 @@ async def get_folder_state(
         )
 
 
+@router.get("/folder_state/{subpath}", response_model=QueryResult)
+async def get_folder_state_by_subpath(
+    subpath: str,
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+) -> QueryResult:
+    """Get folder state information for a specific subpath.
+    Returns records where folder_key starts with the provided subpath.
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Append wildcard to match any folder under the subpath
+        filter_value = f"{subpath}/%"
+
+        # Query matching the export.sh format filtered by subpath
+        query = """
+        SELECT
+          folder_key                     AS folder_path,
+          size_kb                        AS folder_size_kb,
+          file_count                     AS folder_file_count,
+          zip_path                       AS archive_path,
+          archived_at                    AS archive_mod_time_epoch,
+          datetime(archived_at,'unixepoch') AS archive_mod_time,
+          last_seen                      AS folder_mod_time_epoch,
+          datetime(last_seen,'unixepoch')   AS folder_mod_time
+        FROM folder_state
+        WHERE folder_key LIKE ?
+        ORDER BY last_seen DESC
+        LIMIT ? OFFSET ?
+        """
+
+        # Execute query with subpath filter
+        cursor.execute(query, (filter_value, limit, offset))
+        rows = cursor.fetchall()
+
+        # Get total count for the filtered subpath
+        count_query = """
+        SELECT COUNT(*) as count FROM folder_state WHERE folder_key LIKE ?
+        """
+        cursor.execute(count_query, (filter_value,))
+        count = cursor.fetchone()["count"]
+
+        conn.close()
+
+        # Convert rows to list of dictionaries
+        data = [dict(row) for row in rows]
+
+        return QueryResult(data=data, count=count)
+    except sqlite3.Error as e:
+        logger.error(f"Database error: {e}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    except Exception as e:
+        logger.error(f"Error querying folder state by subpath: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to query folder state by subpath: {str(e)}"
+        )
+
+
 @router.get("/settings", response_model=Dict[str, Any])
 async def get_settings():
     """Get current settings"""
