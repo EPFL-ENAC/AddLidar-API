@@ -8,7 +8,7 @@ IMAGE_TAG="latest"
 
 # Build the image
 echo "Building Docker image..."
-docker build -t "${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}" . -f Dockerfile-all
+docker build -t "${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}" . -f archive-folders.Dockerfile
 
 
 # Ask before pushing
