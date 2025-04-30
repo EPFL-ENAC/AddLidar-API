@@ -469,7 +469,7 @@ def generate_k8s_addlidarmanager_job(
         client.V1VolumeMount(
             name="data-volume",
             mount_path=settings_dict["MOUNT_PATH"],
-            subPath=settings_dict["SUB_PATH"],
+            sub_path=settings_dict["SUB_PATH"],
         ),
         client.V1VolumeMount(
             name="data-output-volume", mount_path=settings_dict["OUTPUT_PATH"]
