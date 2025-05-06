@@ -559,12 +559,14 @@
             }
 
             // Build request body object with all parameters
+            
             const requestBody = {
               file_path: filePath,
-              format: document.getElementById("format").value,
-              outcrs: document.getElementById("outcrs").value,
+              format: document.getElementById("format").value
             };
-
+            
+            const outcrs = document.getElementById("outcrs").value.trim();
+            if (outcrs) requestBody.outcrs = outcrs;
             // Add optional parameters only if they have values
             const incrs = document.getElementById("incrs").value.trim();
             if (incrs) requestBody.incrs = incrs;

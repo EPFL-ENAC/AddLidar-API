@@ -107,11 +107,13 @@ spec:
                 exit 0
               fi
           volumeMounts:
-            - mountPath: "{{ orig_dir }}"
-              name: lidar-data
+            - name: fts-addlidar
+              subPath: "fts-addlidar/LiDAR"
+              mountPath: "{{ orig_dir }}"
               readOnly: true
-            - mountPath: "{{ zip_dir }}"
-              name: lidar-zips
+            - name: fts-addlidar
+              subPath: "fts-addlidar/LiDAR-Zips"
+              mountPath: "{{ zip_dir }}"
             - mountPath: /data
               name: data
             - mountPath: "{{ db_dir }}"
@@ -126,12 +128,9 @@ spec:
       volumes:
         - name: data
           emptyDir: {}
-        - name: lidar-data
+        - name: fts-addlidar
           persistentVolumeClaim:
             claimName: addlidar-smb-pvc
-        - name: lidar-zips
-          persistentVolumeClaim:
-            claimName: addlidar-smb-zip-pvc
         - name: db-dir
           persistentVolumeClaim:
             claimName: addlidar-db-pvc
