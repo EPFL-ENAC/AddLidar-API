@@ -59,8 +59,9 @@ spec:
                 echo "false" > /data/folder_valid.txt
               fi
           volumeMounts:
-            - mountPath: "{{ orig_dir }}"
-              name: lidar-data
+            - name: fts-addlidar
+              subPath: "fts-addlidar/LiDAR"
+              mountPath: "{{ orig_dir }}"
               readOnly: true
             - mountPath: /data
               name: data
