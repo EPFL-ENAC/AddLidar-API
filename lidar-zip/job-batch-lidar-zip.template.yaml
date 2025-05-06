@@ -121,8 +121,8 @@ spec:
               name: db-dir
           resources:
             limits:
-              cpu: "8"
-              memory: "8Gi"
+              cpu: "2"
+              memory: "2Gi"
             requests:
               cpu: "1"
               memory: "1Gi"
