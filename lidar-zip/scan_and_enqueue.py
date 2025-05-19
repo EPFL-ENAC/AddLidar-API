@@ -719,30 +719,25 @@ def main() -> None:
 
     # Process metacloud files if requested
     metacloud_count = 0
-    if args.process_metacloud:
-        logger.info("Scanning for .metacloud files...")
-        metacloud_changes = scan_for_metacloud_files(db_manager, dry_run)
-        metacloud_count = len(metacloud_changes)
+    logger.info("Scanning for .metacloud files...")
+    metacloud_changes = scan_for_metacloud_files(db_manager, dry_run)
+    metacloud_count = len(metacloud_changes)
 
-        if metacloud_changes:
-            logger.info(f"Found {metacloud_count} .metacloud files to process")
-            # Use max_jobs to limit metacloud files as well
-            if max_jobs > 0 and metacloud_count > max_jobs:
-                logger.info(
-                    f"Limiting to {max_jobs} out of {metacloud_count} metacloud files"
-                )
-                metacloud_changes = metacloud_changes[:max_jobs]
-                metacloud_count = max_jobs
-
-            potree_job_count = queue_potree_conversion_jobs(
-                metacloud_changes, export_only
+    if metacloud_changes:
+        logger.info(f"Found {metacloud_count} .metacloud files to process")
+        # Use max_jobs to limit metacloud files as well
+        if max_jobs > 0 and metacloud_count > max_jobs:
+            logger.info(
+                f"Limiting to {max_jobs} out of {metacloud_count} metacloud files"
             )
-            if potree_job_count:
-                logger.info(
-                    f"Successfully created potree conversion job for {metacloud_count} files"
-                )
-        else:
-            logger.info("No metacloud changes detected")
+            metacloud_changes = metacloud_changes[:max_jobs]
+            metacloud_count = max_jobs
+
+        potree_job_count = queue_potree_conversion_jobs(metacloud_changes, export_only)
+        if potree_job_count:
+            logger.info(
+                f"Successfully created potree conversion job for {metacloud_count} files"
+            )
 
     # Update completion message to include metacloud information
     logger.info(
