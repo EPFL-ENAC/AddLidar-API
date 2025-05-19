@@ -1,0 +1,151 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "job-batch-potree-conversion-{{ timestamp }}"
+  namespace: "epfl-cryos-addlidar-potree-prod"
+spec:
+  ttlSecondsAfterFinished: 3600 # 1 hour
+  # prettier-ignore
+  completions: {{ metacloud_files|length }} # Dynamic based on metacloud file count
+  # prettier-ignore
+  parallelism: {{ parallelism|default(2) }}
+  completionMode: Indexed
+  template:
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: job-name
+                      operator: In
+                      values:
+                        - job-batch-potree-conversion-{{ timestamp }}
+                topologyKey: "kubernetes.io/hostname"
+      restartPolicy: Never
+      initContainers:
+        - name: "prepare-metacloud"
+          image: "docker.io/library/bash:5.1"
+          command:
+            - "bash"
+            - "-c"
+            - |
+              # Array of metacloud files to process as [mission_key, metacloud_path, metacloud_fp] tuples
+              metacloud_files=(
+              {% for file in metacloud_files %}
+                "{{ file[0] }}|{{ file[1] }}|{{ file[2] }}"
+              {% endfor %}
+              )
+
+              # Get the current metacloud file based on job index
+              current_file_tuple=${metacloud_files[$JOB_COMPLETION_INDEX]}
+
+              # Extract the mission key, path, and fingerprint from the tuple
+              IFS='|' read -r mission_key metacloud_path metacloud_fp <<< "$current_file_tuple"
+
+              # Get the relative path from original dir
+              rel_metacloud_path=${metacloud_path#/lidar/}
+
+              # Check if metacloud file exists
+              if [ -n "${mission_key}" ] && [ -f "/lidar/${rel_metacloud_path}" ]; then
+                echo "Found valid metacloud file: /lidar/${rel_metacloud_path}"
+                # Write the information to files for the main container
+                echo "${mission_key}" > /data/mission_key.txt
+                echo "/lidar/${rel_metacloud_path}" > /data/metacloud_path.txt
+                echo "${metacloud_fp}" > /data/metacloud_fingerprint.txt
+                echo "true" > /data/file_valid.txt
+              else
+                echo "WARNING: Metacloud file /lidar/${rel_metacloud_path} does not exist"
+                echo "false" > /data/file_valid.txt
+              fi
+          volumeMounts:
+            - name: fts-addlidar
+              subPath: "fts-addlidar/LiDAR"
+              mountPath: "/lidar"
+              readOnly: true
+            - mountPath: /data
+              name: data
+          resources:
+            limits:
+              cpu: "100m"
+              memory: "100Mi"
+            requests:
+              cpu: "10m"
+              memory: "10Mi"
+      containers:
+        - name: "potree-converter"
+          image: "ghcr.io/epfl-enac/potree_converter:debian-2.1.1"
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              # Check if the file is valid before proceeding
+              if [ -e "/data/file_valid.txt" ] && [ "$(cat /data/file_valid.txt)" == "true" ]; then
+                MISSION_KEY=$(cat /data/mission_key.txt)
+                INPUT_FILE=$(cat /data/metacloud_path.txt)
+                METACLOUD_FP=$(cat /data/metacloud_fingerprint.txt)
+                START_TIME=$(date +%s)
+                
+                # Set environment variables required by entrypoint.sh
+                export INPUT_FILE
+                export OUTPUT_DIR="/potree/${MISSION_KEY}"
+                export EXTRA_ARGS="--generate-page --overwrite"
+                
+                echo "Converting metacloud file: ${INPUT_FILE} for mission ${MISSION_KEY}"
+                echo "Output directory: ${OUTPUT_DIR}"
+                
+                # Run the entrypoint script
+                /entrypoint.sh
+                RESULT=$?
+                
+                # Calculate processing time
+                END_TIME=$(date +%s)
+                PROCESSING_TIME=$((END_TIME - START_TIME))
+                
+                # Update database with results
+                if [ $RESULT -eq 0 ]; then
+                  # Success
+                  sqlite3 "{{ db_path }}" \
+                    "UPDATE potree_metacloud_state SET processing_status = 'success', last_processed = ${END_TIME}, processing_time = ${PROCESSING_TIME}, fp = '${METACLOUD_FP}' WHERE mission_key = '${MISSION_KEY}';"
+                  echo "Potree conversion successful for ${MISSION_KEY}"
+                else
+                  # Failure
+                  ERROR_MSG="Conversion failed with exit code ${RESULT}"
+                  sqlite3 "{{ db_path }}" \
+                    "UPDATE potree_metacloud_state SET processing_status = 'failed', last_processed = ${END_TIME}, processing_time = ${PROCESSING_TIME}, error_message = '$(echo "${ERROR_MSG}" | sed "s/'/''/g")' WHERE mission_key = '${MISSION_KEY}';"
+                  echo "Potree conversion failed for ${MISSION_KEY}"
+                  exit $RESULT
+                fi
+              else
+                echo "Skipping potree conversion - invalid or missing metacloud file"
+                exit 0
+              fi
+          volumeMounts:
+            - name: fts-addlidar
+              subPath: "fts-addlidar/LiDAR"
+              mountPath: "/lidar"
+              readOnly: true
+            - name: fts-addlidar
+              subPath: "fts-addlidar/Potree"
+              mountPath: "/potree"
+            - mountPath: "/data"
+              name: data
+            - mountPath: "{{ db_dir }}"
+              name: db-dir
+          resources:
+            limits:
+              cpu: "4"
+              memory: "16Gi"
+            requests:
+              cpu: "1"
+              memory: "2Gi"
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: fts-addlidar
+          persistentVolumeClaim:
+            claimName: addlidar-smb-pvc
+        - name: db-dir
+          persistentVolumeClaim:
+            claimName: addlidar-db-pvc

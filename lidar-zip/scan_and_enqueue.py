@@ -240,6 +240,109 @@ def init_database(db_path: str) -> DatabaseManager:
     return DatabaseManager(db_path)
 
 
+def scan_for_metacloud_files(
+    db_manager: DatabaseManager, dry_run: bool = False
+) -> List[List[str]]:
+    """
+    Scan directories for .metacloud files and track changes.
+
+    Args:
+        db_manager: Database manager instance
+        dry_run: Whether to perform a dry run without modifying the database
+
+    Returns:
+        List of lists containing [mission_key, metacloud_path, fingerprint] that have changed
+    """
+    global ORIG
+    metacloud_changes: List[List[str]] = []
+    current_time = int(time.time())
+
+    # First, list all level1 directories (missions)
+    for level1 in os.listdir(ORIG):
+        p1 = os.path.join(ORIG, level1)
+        if not os.path.isdir(p1):
+            continue
+
+        # Look for .metacloud file in the mission directory
+        metacloud_file = None
+        for file in os.listdir(p1):
+            if file.endswith(".metacloud"):
+                metacloud_file = os.path.join(p1, file)
+                break
+
+        if not metacloud_file:
+            logger.info(f"No .metacloud file found in mission {level1}")
+            continue
+
+        # Get fingerprint of the metacloud file
+        try:
+            metacloud_fp = fingerprint_file(metacloud_file)
+            logger.info(
+                f"Found .metacloud file in {level1}, fingerprint: {metacloud_fp}"
+            )
+
+            # Check if we have this mission key in folder_state
+            with db_manager.get_connection() as conn:
+                cursor = conn.execute(
+                    "SELECT 1 FROM folder_state WHERE mission_key=? LIMIT 1", (level1,)
+                )
+                if not cursor.fetchone():
+                    logger.info(
+                        f"Mission {level1} not in folder_state, skipping metacloud processing"
+                    )
+                    continue
+
+            # Check if the metacloud file has changed
+            with db_manager.get_connection() as conn:
+                cursor = conn.execute(
+                    "SELECT fp FROM potree_metacloud_state WHERE mission_key=?",
+                    (level1,),
+                )
+                row = cursor.fetchone()
+
+            if not row or row[0] != metacloud_fp:
+                logger.info(f"Change detected in .metacloud file for mission {level1}")
+                metacloud_changes.append([level1, metacloud_file, metacloud_fp])
+
+                if not dry_run:
+                    output_path = os.path.join(os.path.dirname(ZIP), "Potree", level1)
+
+                    with db_manager.get_connection() as conn:
+                        conn.execute(
+                            """INSERT INTO potree_metacloud_state
+                            (mission_key, fp, output_path, last_checked, last_processed, processing_status)
+                            VALUES (?, ?, ?, ?, NULL, 'pending')
+                            ON CONFLICT(mission_key) DO UPDATE SET
+                            fp = excluded.fp,
+                            output_path = excluded.output_path,
+                            last_checked = excluded.last_checked,
+                            last_processed = NULL,
+                            processing_status = 'pending'""",
+                            (
+                                level1,
+                                metacloud_fp,
+                                output_path,
+                                current_time,
+                            ),
+                        )
+                        conn.commit()
+            else:
+                # Just update the last_checked timestamp
+                if not dry_run:
+                    with db_manager.get_connection() as conn:
+                        conn.execute(
+                            """UPDATE potree_metacloud_state
+                            SET last_checked = ?
+                            WHERE mission_key = ?""",
+                            (current_time, level1),
+                        )
+                        conn.commit()
+        except Exception as e:
+            logger.error(f"Error processing metacloud file in {level1}: {e}")
+
+    return metacloud_changes
+
+
 def collect_changed_folders(
     db_manager: DatabaseManager, dry_run: bool = False
 ) -> List[List[str]]:
@@ -312,6 +415,90 @@ def collect_changed_folders(
                 logger.error(f"Error processing directory {rel}: {e}")
 
     return changed_folders
+
+
+def queue_potree_conversion_jobs(
+    metacloud_files: List[List[str]], export_only: bool = False
+) -> Optional[int]:
+    """
+    Create a Kubernetes batch job for Potree conversion of metacloud files using a template.
+
+    Args:
+        metacloud_files: List containing [mission_key, metacloud_path, fingerprint] lists
+        export_only: Whether to only export the job YAML without creating it
+
+    Returns:
+        Optional[int]: Number of jobs created (1 if batch job created) or None if no action was taken
+    """
+    global ORIG, ZIP, DB, args
+
+    if not metacloud_files:
+        logger.info("No metacloud files to process, skipping job creation")
+        return None
+
+    try:
+        # Load Jinja2 template
+        template_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "job-batch-potree-converter.template.yaml",
+        )
+
+        if not os.path.exists(template_path):
+            logger.error(f"Potree template file not found at {template_path}")
+            return None
+
+        with open(template_path, "r") as f:
+            template_content = f.read()
+
+        # Setup Jinja2 environment
+        template = jinja2.Template(template_content)
+
+        # Generate timestamp for unique job name
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+
+        # Prepare template context
+        parallelism = min(
+            len(metacloud_files), 4
+        )  # Limit parallelism based on number of files
+
+        context = {
+            "timestamp": timestamp,
+            "metacloud_files": metacloud_files,
+            "parallelism": parallelism,
+            "db_path": DB,
+            "db_dir": os.path.dirname(DB),
+        }
+
+        # Render the template
+        job_yaml = template.render(**context)
+
+        if export_only:
+            print(job_yaml)
+            logger.info(
+                f"Printed batch Potree job YAML for {len(metacloud_files)} metacloud files"
+            )
+            return 1
+
+        # Create job from YAML
+        import yaml
+        from kubernetes import utils
+
+        job_dict = yaml.safe_load(job_yaml)
+        try:
+            result = utils.create_from_dict(client.ApiClient(), job_dict, True)
+            job_name = job_dict["metadata"]["name"]
+            logger.info(
+                f"Created batch Potree conversion job '{job_name}' for {len(metacloud_files)} metacloud files"
+            )
+            logger.debug(f"Job creation result: {result}")
+            return 1
+        except Exception as api_ex:
+            logger.error(f"Failed to create Kubernetes batch job via API: {api_ex}")
+            return None
+
+    except Exception as e:
+        logger.error(f"Failed to create Potree conversion batch job: {e}")
+        return None
 
 
 def queue_batch_zip_job(
@@ -530,7 +717,42 @@ def main() -> None:
     else:
         logger.info("No changes detected, no batch job needed")
 
-    logger.info(f"Scan completed: detected {length_changed_folders} changes")
+    # Process metacloud files if requested
+    metacloud_count = 0
+    if args.process_metacloud:
+        logger.info("Scanning for .metacloud files...")
+        metacloud_changes = scan_for_metacloud_files(db_manager, dry_run)
+        metacloud_count = len(metacloud_changes)
+
+        if metacloud_changes:
+            logger.info(f"Found {metacloud_count} .metacloud files to process")
+            # Use max_jobs to limit metacloud files as well
+            if max_jobs > 0 and metacloud_count > max_jobs:
+                logger.info(
+                    f"Limiting to {max_jobs} out of {metacloud_count} metacloud files"
+                )
+                metacloud_changes = metacloud_changes[:max_jobs]
+                metacloud_count = max_jobs
+
+            potree_job_count = queue_potree_conversion_jobs(
+                metacloud_changes, export_only
+            )
+            if potree_job_count:
+                logger.info(
+                    f"Successfully created potree conversion job for {metacloud_count} files"
+                )
+        else:
+            logger.info("No metacloud changes detected")
+
+    # Update completion message to include metacloud information
+    logger.info(
+        f"Scan completed: detected {length_changed_folders} folder changes"
+        + (
+            f" and {metacloud_count} metacloud changes"
+            if args.process_metacloud
+            else ""
+        )
+    )
 
 
 if __name__ == "__main__":
