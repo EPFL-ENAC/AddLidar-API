@@ -83,6 +83,7 @@ spec:
                 INPUT_PATH=$(cat /data/input_path.txt)
                 OUTPUT_PATH=$(cat /data/output_path.txt)
                 FINGERPRINT=$(cat /data/folder_fingerprint.txt)
+                START_TIME=$(date +%s)
                 
                 echo "Processing folder: $INPUT_PATH"
                 /usr/local/bin/archive_one_folder.sh /lidar/"$INPUT_PATH" /zips/"$OUTPUT_PATH"
@@ -94,7 +95,7 @@ spec:
                 TIMESTAMP=$(date +%s)
                 echo "Values to be updated: TIMESTAMP=${TIMESTAMP}, FINGERPRINT=${FINGERPRINT} for ${INPUT_PATH}"
                 sqlite3 "{{ db_path }}" \
-                  "UPDATE folder_state SET archived_at = ${TIMESTAMP}, fp = '${FINGERPRINT}' WHERE folder_key = '${INPUT_PATH}';" && \
+                  "UPDATE folder_state SET last_processed = ${TIMESTAMP}, fp = '${FINGERPRINT}', processing_status = 'success', processing_time = $(($(date +%s) - ${START_TIME})) WHERE folder_key = '${INPUT_PATH}';" && \
                 echo "Database updated for ${INPUT_PATH}" || \
                 echo "Failed to update database for ${INPUT_PATH}"
 

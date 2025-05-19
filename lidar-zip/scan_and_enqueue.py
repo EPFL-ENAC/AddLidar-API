@@ -51,6 +51,30 @@ DB: str = ""
 args = None
 
 
+def fingerprint_file(file_path: str) -> str:
+    """
+    Generate a unique fingerprint for a single file.
+
+    Args:
+        file_path: Path to the file
+
+    Returns:
+        SHA-256 hash representing the file content
+    """
+    import hashlib
+
+    try:
+        hasher = hashlib.sha256()
+        with open(file_path, "rb") as f:
+            # Read in chunks for memory efficiency
+            for chunk in iter(lambda: f.read(4096), b""):
+                hasher.update(chunk)
+        return hasher.hexdigest()
+    except Exception as e:
+        logger.error(f"Failed to generate fingerprint for file {file_path}: {e}")
+        raise
+
+
 def fingerprint(path: str) -> str:
     """
     Generate a unique fingerprint for a directory based on file attributes.
@@ -262,16 +286,20 @@ def collect_changed_folders(
                         with db_manager.get_connection() as conn:
                             conn.execute(
                                 """INSERT INTO folder_state
-                                (folder_key, fp, size_kb, file_count, last_seen, archived_at, zip_path)
-                                VALUES (?, ?, ?, ?, ?, NULL, ?)
-                                ON CONFLICT(folder_key) DO UPDATE SET
-                                size_kb = excluded.size_kb,
-                                file_count = excluded.file_count,
-                                last_seen = excluded.last_seen,
-                                archived_at = NULL,
-                                zip_path = excluded.zip_path""",
+                            (folder_key, mission_key, fp, size_kb, file_count, last_checked, last_processed, processing_status, output_path)
+                            VALUES (?, ?, ?, ?, ?, ?, NULL, 'pending', ?)
+                            ON CONFLICT(folder_key) DO UPDATE SET
+                            mission_key = excluded.mission_key,
+                            fp = excluded.fp,
+                            size_kb = excluded.size_kb,
+                            file_count = excluded.file_count,
+                            last_checked = excluded.last_checked,
+                            last_processed = NULL,
+                            processing_status = 'pending',
+                            output_path = excluded.output_path""",
                                 (
                                     rel,
+                                    level1,
                                     fp,
                                     size,
                                     count,
