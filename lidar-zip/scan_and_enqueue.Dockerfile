@@ -6,6 +6,7 @@ WORKDIR /app
 # Copy the necessary files into the container
 COPY scan_and_enqueue.py .
 COPY job-batch-lidar-zip.template.yaml .
+COPY job-batch-potree-converter.template.yaml .
 COPY persist_state.sql .
 
 # Install required dependencies
