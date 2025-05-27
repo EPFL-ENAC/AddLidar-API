@@ -744,7 +744,7 @@ def main() -> None:
         f"Scan completed: detected {length_changed_folders} folder changes"
         + (
             f" and {metacloud_count} metacloud changes"
-            if args.process_metacloud
+            if metacloud_count > 0  # Changed from args.process_metacloud
             else ""
         )
     )
