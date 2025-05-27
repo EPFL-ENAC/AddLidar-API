@@ -37,6 +37,31 @@ class QueryResult(BaseModel):
     count: int
 
 
+class FolderStateResponse(BaseModel):
+    folder_key: str
+    mission_key: str
+    fp: str
+    output_path: str
+    size_kb: int
+    file_count: int
+    last_checked: int
+    last_processed: Optional[int]
+    processing_time: Optional[int]
+    processing_status: Optional[str]
+    error_message: Optional[str]
+
+
+class PotreeMetacloudStateResponse(BaseModel):
+    mission_key: str
+    fp: Optional[str]
+    output_path: Optional[str]
+    last_checked: int
+    last_processed: Optional[int]
+    processing_time: Optional[int]
+    processing_status: Optional[str]
+    error_message: Optional[str]
+
+
 # Database connection helper
 def get_db_connection():
     try:
@@ -169,24 +194,29 @@ async def get_folder_state(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
 ):
-    """Get folder state information matching the export.sh format"""
+    """Get folder state information with new schema"""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # Query matching the export.sh format
+        # Query with new schema
         query = """
         SELECT
-          folder_key                     AS folder_path,
-          size_kb                        AS folder_size_kb,
-          file_count                     AS folder_file_count,
-          zip_path                       AS archive_path,
-          archived_at                    AS archive_mod_time_epoch,
-          datetime(archived_at,'unixepoch') AS archive_mod_time,
-          last_seen                      AS folder_mod_time_epoch,
-          datetime(last_seen,'unixepoch')   AS folder_mod_time
+          folder_key,
+          mission_key,
+          fp,
+          output_path,
+          size_kb,
+          file_count,
+          last_checked,
+          last_processed,
+          processing_time,
+          processing_status,
+          error_message,
+          datetime(last_checked,'unixepoch') AS last_checked_time,
+          datetime(last_processed,'unixepoch') AS last_processed_time
         FROM folder_state
-        ORDER BY last_seen DESC
+        ORDER BY last_checked DESC
         LIMIT ? OFFSET ?
         """
 
@@ -214,7 +244,7 @@ async def get_folder_state(
         )
 
 
-@router.get("/folder_state/{subpath}", response_model=QueryResult)
+@router.get("/folder_state/{subpath:path}", response_model=QueryResult)
 async def get_folder_state_by_subpath(
     subpath: str,
     limit: int = Query(100, ge=1, le=1000),
@@ -227,23 +257,28 @@ async def get_folder_state_by_subpath(
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # Append wildcard to match any folder under the subpath
-        filter_value = f"{subpath}/%"
+        # Use the subpath as a prefix filter
+        filter_value = f"{subpath}%"
 
-        # Query matching the export.sh format filtered by subpath
+        # Query with new schema filtered by subpath
         query = """
         SELECT
-          folder_key                     AS folder_path,
-          size_kb                        AS folder_size_kb,
-          file_count                     AS folder_file_count,
-          zip_path                       AS archive_path,
-          archived_at                    AS archive_mod_time_epoch,
-          datetime(archived_at,'unixepoch') AS archive_mod_time,
-          last_seen                      AS folder_mod_time_epoch,
-          datetime(last_seen,'unixepoch')   AS folder_mod_time
+          folder_key,
+          mission_key,
+          fp,
+          output_path,
+          size_kb,
+          file_count,
+          last_checked,
+          last_processed,
+          processing_time,
+          processing_status,
+          error_message,
+          datetime(last_checked,'unixepoch') AS last_checked_time,
+          datetime(last_processed,'unixepoch') AS last_processed_time
         FROM folder_state
         WHERE folder_key LIKE ?
-        ORDER BY last_seen DESC
+        ORDER BY last_checked DESC
         LIMIT ? OFFSET ?
         """
 
@@ -271,6 +306,212 @@ async def get_folder_state_by_subpath(
         logger.error(f"Error querying folder state by subpath: {e}")
         raise HTTPException(
             status_code=500, detail=f"Failed to query folder state by subpath: {str(e)}"
+        )
+
+
+@router.get("/folder_state/mission/{mission_key}", response_model=QueryResult)
+async def get_folder_state_by_mission(
+    mission_key: str,
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+) -> QueryResult:
+    """Get folder state information for a specific mission key."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Query filtered by mission_key
+        query = """
+        SELECT
+          folder_key,
+          mission_key,
+          fp,
+          output_path,
+          size_kb,
+          file_count,
+          last_checked,
+          last_processed,
+          processing_time,
+          processing_status,
+          error_message,
+          datetime(last_checked,'unixepoch') AS last_checked_time,
+          datetime(last_processed,'unixepoch') AS last_processed_time
+        FROM folder_state
+        WHERE mission_key = ?
+        ORDER BY last_checked DESC
+        LIMIT ? OFFSET ?
+        """
+
+        # Execute query with mission_key filter
+        cursor.execute(query, (mission_key, limit, offset))
+        rows = cursor.fetchall()
+
+        # Get total count for the mission
+        count_query = """
+        SELECT COUNT(*) as count FROM folder_state WHERE mission_key = ?
+        """
+        cursor.execute(count_query, (mission_key,))
+        count = cursor.fetchone()["count"]
+
+        conn.close()
+
+        # Convert rows to list of dictionaries
+        data = [dict(row) for row in rows]
+
+        return QueryResult(data=data, count=count)
+    except sqlite3.Error as e:
+        logger.error(f"Database error: {e}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    except Exception as e:
+        logger.error(f"Error querying folder state by mission: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to query folder state by mission: {str(e)}"
+        )
+
+
+@router.get("/potree_metacloud_state", response_model=QueryResult)
+async def get_potree_metacloud_state(
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+):
+    """Get potree metacloud state information"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Query potree_metacloud_state table
+        query = """
+        SELECT
+          mission_key,
+          fp,
+          output_path,
+          last_checked,
+          last_processed,
+          processing_time,
+          processing_status,
+          error_message,
+          datetime(last_checked,'unixepoch') AS last_checked_time,
+          datetime(last_processed,'unixepoch') AS last_processed_time
+        FROM potree_metacloud_state
+        ORDER BY last_checked DESC
+        LIMIT ? OFFSET ?
+        """
+
+        # Execute query
+        cursor.execute(query, (limit, offset))
+        rows = cursor.fetchall()
+
+        # Get total count
+        cursor.execute("SELECT COUNT(*) as count FROM potree_metacloud_state")
+        count = cursor.fetchone()["count"]
+
+        conn.close()
+
+        # Convert rows to list of dicts
+        data = [dict(row) for row in rows]
+
+        return QueryResult(data=data, count=count)
+    except sqlite3.Error as e:
+        logger.error(f"Database error: {e}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    except Exception as e:
+        logger.error(f"Error querying potree metacloud state: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to query potree metacloud state: {str(e)}"
+        )
+
+
+@router.get("/potree_metacloud_state/{mission_key}", response_model=Dict[str, Any])
+async def get_potree_metacloud_state_by_mission(mission_key: str):
+    """Get potree metacloud state for a specific mission"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Query for specific mission
+        query = """
+        SELECT
+          mission_key,
+          fp,
+          output_path,
+          last_checked,
+          last_processed,
+          processing_time,
+          processing_status,
+          error_message,
+          datetime(last_checked,'unixepoch') AS last_checked_time,
+          datetime(last_processed,'unixepoch') AS last_processed_time
+        FROM potree_metacloud_state
+        WHERE mission_key = ?
+        """
+
+        cursor.execute(query, (mission_key,))
+        row = cursor.fetchone()
+
+        conn.close()
+
+        if not row:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Potree metacloud state not found for mission: {mission_key}",
+            )
+
+        return dict(row)
+    except sqlite3.Error as e:
+        logger.error(f"Database error: {e}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    except Exception as e:
+        logger.error(f"Error querying potree metacloud state: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to query potree metacloud state: {str(e)}"
+        )
+
+
+@router.get("/processing_status", response_model=QueryResult)
+async def get_processing_status():
+    """Get processing status overview for both folder_state and potree_metacloud_state"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Combined query to get processing status overview
+        query = """
+        SELECT 
+          'folder_state' as table_name,
+          processing_status,
+          COUNT(*) as count
+        FROM folder_state 
+        GROUP BY processing_status
+        
+        UNION ALL
+        
+        SELECT 
+          'potree_metacloud_state' as table_name,
+          processing_status,
+          COUNT(*) as count
+        FROM potree_metacloud_state 
+        GROUP BY processing_status
+        
+        ORDER BY table_name, processing_status
+        """
+
+        cursor.execute(query)
+        rows = cursor.fetchall()
+
+        conn.close()
+
+        # Convert rows to list of dicts
+        data = [dict(row) for row in rows]
+        count = len(data)
+
+        return QueryResult(data=data, count=count)
+    except sqlite3.Error as e:
+        logger.error(f"Database error: {e}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    except Exception as e:
+        logger.error(f"Error querying processing status: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to query processing status: {str(e)}"
         )
 
 
