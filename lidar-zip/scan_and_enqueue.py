@@ -381,7 +381,24 @@ def collect_changed_folders(
                     )
                     row = cursor.fetchone()
 
-                if not row or row[0] != fp:
+                # Check if folder needs processing:
+                # 1. New folder (not in database)
+                # 2. Fingerprint has changed
+                # 3. Previous processing failed or is still pending
+                needs_processing = False
+                if not row:
+                    logger.info(f"New folder detected: {rel}")
+                    needs_processing = True
+                elif row[0] != fp:
+                    logger.info(f"Fingerprint change detected in {rel}")
+                    needs_processing = True
+                elif row[1] in ("pending", "failed", None):
+                    logger.info(
+                        f"Incomplete processing detected in {rel} (status: {row[1]})"
+                    )
+                    needs_processing = True
+
+                if needs_processing:
                     logger.info(f"Change detected in {rel}")
                     changed_folders.append([rel, fp])
 
