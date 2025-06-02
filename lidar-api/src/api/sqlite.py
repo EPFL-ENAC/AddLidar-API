@@ -71,7 +71,7 @@ def get_db_connection():
         conn.row_factory = sqlite3.Row  # Return rows as dictionaries
         return conn
     except sqlite3.Error as e:
-        logger.error(f"Database connection error: {e}")
+        logger.error(f"Database connection error: {e} with path {db_path}")
         raise HTTPException(
             status_code=500, detail=f"Database connection failed: {str(e)}"
         )
