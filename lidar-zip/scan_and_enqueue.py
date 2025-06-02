@@ -300,7 +300,26 @@ def scan_for_metacloud_files(
                 )
                 row = cursor.fetchone()
 
-            if not row or row[0] != metacloud_fp:
+            # Check if metacloud file needs processing:
+            # 1. New file (not in database)
+            # 2. Fingerprint has changed
+            # 3. Previous processing failed or is still pending
+            needs_processing = False
+            if not row:
+                logger.info(f"New .metacloud file detected for mission {level1}")
+                needs_processing = True
+            elif row[0] != metacloud_fp:
+                logger.info(
+                    f"Fingerprint change detected in .metacloud file for mission {level1}"
+                )
+                needs_processing = True
+            elif row[1] != "success":
+                logger.info(
+                    f"Incomplete processing detected for .metacloud file in mission {level1} (status: {row[1]})"
+                )
+                needs_processing = True
+
+            if needs_processing:
                 logger.info(f"Change detected in .metacloud file for mission {level1}")
                 metacloud_changes.append([level1, metacloud_file, metacloud_fp])
 
@@ -392,7 +411,7 @@ def collect_changed_folders(
                 elif row[0] != fp:
                     logger.info(f"Fingerprint change detected in {rel}")
                     needs_processing = True
-                elif row[1] in ("pending", "failed", None):
+                elif row[1] != "success":
                     logger.info(
                         f"Incomplete processing detected in {rel} (status: {row[1]})"
                     )
