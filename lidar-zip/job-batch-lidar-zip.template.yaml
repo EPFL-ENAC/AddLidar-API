@@ -9,6 +9,7 @@ spec:
   completions: {{ folders|length }} # Dynamic based on folder count
   # prettier-ignore
   parallelism: {{ parallelism|default(4) }}
+  backoffLimit: 0 # No retries per completion
   completionMode: Indexed
   template:
     spec:

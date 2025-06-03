@@ -9,6 +9,8 @@ spec:
   completions: {{ metacloud_files|length }} # Dynamic based on metacloud file count
   # prettier-ignore
   parallelism: {{ parallelism|default(2) }}
+  backoffLimit: 2 # Maximum 2 retries per completion
+  activeDeadlineSeconds: 7200 # 2 hour maximum job runtime
   completionMode: Indexed
   template:
     spec:
