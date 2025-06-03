@@ -95,30 +95,62 @@ spec:
                 echo "Converting metacloud file: ${INPUT_FILE} for mission ${MISSION_KEY}"
                 echo "Output directory: ${OUTPUT_DIR}"
                 
-                # Run the entrypoint script
-                /entrypoint.sh
-                RESULT=$?
-                
-                # Calculate processing time
-                END_TIME=$(date +%s)
-                PROCESSING_TIME=$((END_TIME - START_TIME))
-                
-                # Update database with results
-                if [ $RESULT -eq 0 ]; then
+                # Run the entrypoint script and capture exit code
+                if /entrypoint.sh; then
                   # Success
-                  sqlite3 "{{ db_path }}" \
-                    "UPDATE potree_metacloud_state SET processing_status = 'success', last_processed = ${END_TIME}, processing_time = ${PROCESSING_TIME}, fp = '${METACLOUD_FP}' WHERE mission_key = '${MISSION_KEY}';"
+                  END_TIME=$(date +%s)
+                  PROCESSING_TIME=$((END_TIME - START_TIME))
+                  
                   echo "Potree conversion successful for ${MISSION_KEY}"
+                  echo "Updating database for ${MISSION_KEY} with success status"
+                  
+                  sqlite3 "{{ db_path }}" \
+                    "UPDATE potree_metacloud_state SET processing_status = 'success', last_processed = ${END_TIME}, processing_time = ${PROCESSING_TIME}, fp = '${METACLOUD_FP}', error_message = NULL WHERE mission_key = '${MISSION_KEY}';" && \
+                  echo "Database updated successfully for ${MISSION_KEY}" || \
+                  echo "Failed to update database for ${MISSION_KEY}"
                 else
                   # Failure
+                  RESULT=$?
+                  END_TIME=$(date +%s)
+                  PROCESSING_TIME=$((END_TIME - START_TIME))
                   ERROR_MSG="Conversion failed with exit code ${RESULT}"
+                  
+                  echo "Potree conversion failed for ${MISSION_KEY} with exit code ${RESULT}"
+                  echo "Updating database for ${MISSION_KEY} with failed status"
+                  
                   sqlite3 "{{ db_path }}" \
-                    "UPDATE potree_metacloud_state SET processing_status = 'failed', last_processed = ${END_TIME}, processing_time = ${PROCESSING_TIME}, error_message = '$(echo "${ERROR_MSG}" | sed "s/'/''/g")' WHERE mission_key = '${MISSION_KEY}';"
-                  echo "Potree conversion failed for ${MISSION_KEY}"
+                    "UPDATE potree_metacloud_state SET processing_status = 'failed', last_processed = ${END_TIME}, processing_time = ${PROCESSING_TIME}, error_message = '$(echo "${ERROR_MSG}" | sed "s/'/''/g")' WHERE mission_key = '${MISSION_KEY}';" && \
+                  echo "Database updated with failed status for ${MISSION_KEY}" || \
+                  echo "Failed to update database for ${MISSION_KEY}"
+                  
                   exit $RESULT
                 fi
+
+                # Show the current state of the database record after update
+                echo "Database record state after update:"
+                sqlite3 -header -column "{{ db_path }}" \
+                  "SELECT mission_key, processing_status, error_message FROM potree_metacloud_state WHERE mission_key = '${MISSION_KEY}';" || \
+                echo "Failed to query database record"
               else
-                echo "Skipping potree conversion - invalid or missing metacloud file"
+                # Handle invalid or missing metacloud file case
+                if [ -e "/data/mission_key.txt" ]; then
+                  MISSION_KEY=$(cat /data/mission_key.txt)
+                  METACLOUD_FP=$(cat /data/metacloud_fingerprint.txt 2>/dev/null || echo "")
+                  
+                  echo "Skipping potree conversion - invalid or missing metacloud file for mission: ${MISSION_KEY}"
+                  
+                  # Update database with failed status for invalid/missing file
+                  echo "Updating database for ${MISSION_KEY} with failed status (invalid/missing metacloud file)"
+                  TIMESTAMP=$(date +%s)
+                  sqlite3 "{{ db_path }}" \
+                    "UPDATE potree_metacloud_state SET last_processed = ${TIMESTAMP}, processing_status = 'failed', processing_time = 0, error_message = 'Metacloud file is invalid or missing' WHERE mission_key = '${MISSION_KEY}';" && \
+                  echo "Database updated with failed status for invalid metacloud file ${MISSION_KEY}" || \
+                  echo "Failed to update database for ${MISSION_KEY}"
+                else
+                  echo "No mission key available - critical error in job setup"
+                  exit 1
+                fi
+                
                 exit 0
               fi
           volumeMounts:

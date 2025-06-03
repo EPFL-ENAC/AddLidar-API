@@ -292,16 +292,37 @@ def scan_for_metacloud_files(
                     )
                     continue
 
-            # Check if the metacloud file has changed
+            # Check if the metacloud file has changed or needs reprocessing
             with db_manager.get_connection() as conn:
                 cursor = conn.execute(
-                    "SELECT fp FROM potree_metacloud_state WHERE mission_key=?",
+                    "SELECT fp, processing_status FROM potree_metacloud_state WHERE mission_key=?",
                     (level1,),
                 )
                 row = cursor.fetchone()
 
-            if not row or row[0] != metacloud_fp:
-                logger.info(f"Change detected in .metacloud file for mission {level1}")
+            # Check if metacloud file needs processing:
+            # 1. New file (not in database)
+            # 2. Fingerprint has changed
+            # 3. Previous processing failed or is still pending
+            needs_processing = False
+            if not row:
+                logger.info(f"New .metacloud file detected for mission {level1}")
+                needs_processing = True
+            elif row[0] != metacloud_fp:
+                logger.info(
+                    f"Fingerprint change detected in .metacloud file for mission {level1}"
+                )
+                needs_processing = True
+            elif row[1] != "success":
+                logger.info(
+                    f"Incomplete processing detected for .metacloud file in mission {level1} (status: {row[1]})"
+                )
+                needs_processing = True
+
+            if needs_processing:
+                logger.info(
+                    f"Adding .metacloud file for mission {level1} to processing queue"
+                )
                 metacloud_changes.append([level1, metacloud_file, metacloud_fp])
 
                 if not dry_run:
@@ -327,7 +348,7 @@ def scan_for_metacloud_files(
                         )
                         conn.commit()
             else:
-                # Just update the last_checked timestamp
+                # Just update the last_checked timestamp for successful completions
                 if not dry_run:
                     with db_manager.get_connection() as conn:
                         conn.execute(
@@ -337,6 +358,10 @@ def scan_for_metacloud_files(
                             (current_time, level1),
                         )
                         conn.commit()
+                logger.debug(
+                    f"No processing needed for .metacloud file in mission {level1} (status: {row[1] if row else 'N/A'})"
+                )
+
         except Exception as e:
             logger.error(f"Error processing metacloud file in {level1}: {e}")
 
@@ -377,7 +402,8 @@ def collect_changed_folders(
 
                 with db_manager.get_connection() as conn:
                     cursor = conn.execute(
-                        "SELECT fp FROM folder_state WHERE folder_key=?", (rel,)
+                        "SELECT fp, processing_status FROM folder_state WHERE folder_key=?",
+                        (rel,),
                     )
                     row = cursor.fetchone()
 
@@ -399,7 +425,7 @@ def collect_changed_folders(
                     needs_processing = True
 
                 if needs_processing:
-                    logger.info(f"Change detected in {rel}")
+                    logger.info(f"Adding {rel} to processing queue")
                     changed_folders.append([rel, fp])
 
                     if not dry_run:
@@ -428,6 +454,11 @@ def collect_changed_folders(
                                 ),
                             )
                             conn.commit()
+                else:
+                    logger.debug(
+                        f"No processing needed for {rel} (status: {row[1] if row else 'N/A'})"
+                    )
+
             except Exception as e:
                 logger.error(f"Error processing directory {rel}: {e}")
 

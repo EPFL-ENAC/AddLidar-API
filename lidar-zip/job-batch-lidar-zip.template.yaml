@@ -86,26 +86,60 @@ spec:
                 START_TIME=$(date +%s)
                 
                 echo "Processing folder: $INPUT_PATH"
-                /usr/local/bin/archive_one_folder.sh /lidar/"$INPUT_PATH" /zips/"$OUTPUT_PATH"
-                echo "Archive created: $OUTPUT_PATH"
                 
-                # Update database
-                echo "Updating database for ${INPUT_PATH}"
-                # Update database with both timestamp AND fingerprint using direct SQLite command
-                TIMESTAMP=$(date +%s)
-                echo "Values to be updated: TIMESTAMP=${TIMESTAMP}, FINGERPRINT=${FINGERPRINT} for ${INPUT_PATH}"
-                sqlite3 "{{ db_path }}" \
-                  "UPDATE folder_state SET last_processed = ${TIMESTAMP}, fp = '${FINGERPRINT}', processing_status = 'success', processing_time = $(($(date +%s) - ${START_TIME})) WHERE folder_key = '${INPUT_PATH}';" && \
-                echo "Database updated for ${INPUT_PATH}" || \
-                echo "Failed to update database for ${INPUT_PATH}"
+                # Attempt to create archive and capture exit code
+                if /usr/local/bin/archive_one_folder.sh /lidar/"$INPUT_PATH" /zips/"$OUTPUT_PATH"; then
+                  echo "Archive created successfully: $OUTPUT_PATH"
+                  
+                  # Update database with success status
+                  echo "Updating database for ${INPUT_PATH} with success status"
+                  TIMESTAMP=$(date +%s)
+                  PROCESSING_TIME=$((${TIMESTAMP} - ${START_TIME}))
+                  echo "Values to be updated: TIMESTAMP=${TIMESTAMP}, FINGERPRINT=${FINGERPRINT}, PROCESSING_TIME=${PROCESSING_TIME} for ${INPUT_PATH}"
+                  sqlite3 "{{ db_path }}" \
+                    "UPDATE folder_state SET last_processed = ${TIMESTAMP}, fp = '${FINGERPRINT}', processing_status = 'success', processing_time = ${PROCESSING_TIME} WHERE folder_key = '${INPUT_PATH}';" && \
+                  echo "Database updated successfully for ${INPUT_PATH}" || \
+                  echo "Failed to update database for ${INPUT_PATH}"
+                else
+                  echo "Archive creation failed for: $INPUT_PATH"
+                  
+                  # Update database with failed status
+                  echo "Updating database for ${INPUT_PATH} with failed status"
+                  TIMESTAMP=$(date +%s)
+                  PROCESSING_TIME=$((${TIMESTAMP} - ${START_TIME}))
+                  sqlite3 "{{ db_path }}" \
+                    "UPDATE folder_state SET last_processed = ${TIMESTAMP}, fp = '${FINGERPRINT}', processing_status = 'failed', processing_time = ${PROCESSING_TIME}, error_message = 'Archive creation failed' WHERE folder_key = '${INPUT_PATH}';" && \
+                  echo "Database updated with failed status for ${INPUT_PATH}" || \
+                  echo "Failed to update database for ${INPUT_PATH}"
+                  
+                  exit 1
+                fi
 
                 # Show the current state of the database record after update
                 echo "Database record state after update:"
                 sqlite3 -header -column "{{ db_path }}" \
-                  "SELECT * FROM folder_state;" || \
+                  "SELECT folder_key, processing_status, error_message FROM folder_state WHERE folder_key = '${INPUT_PATH}';" || \
                 echo "Failed to query database record"
               else
-                echo "Skipping archive process - invalid or empty folder"
+                # Handle invalid or empty folder case
+                if [ -e "/data/input_path.txt" ]; then
+                  INPUT_PATH=$(cat /data/input_path.txt)
+                  FINGERPRINT=$(cat /data/folder_fingerprint.txt 2>/dev/null || echo "")
+                  
+                  echo "Skipping archive process - invalid or empty folder: ${INPUT_PATH}"
+                  
+                  # Update database with failed status for invalid/empty folder
+                  echo "Updating database for ${INPUT_PATH} with failed status (invalid/empty folder)"
+                  TIMESTAMP=$(date +%s)
+                  sqlite3 "{{ db_path }}" \
+                    "UPDATE folder_state SET last_processed = ${TIMESTAMP}, processing_status = 'failed', processing_time = 0, error_message = 'Folder is invalid or empty' WHERE folder_key = '${INPUT_PATH}';" && \
+                  echo "Database updated with failed status for invalid folder ${INPUT_PATH}" || \
+                  echo "Failed to update database for ${INPUT_PATH}"
+                else
+                  echo "No input path available - critical error in job setup"
+                  exit 1
+                fi
+                
                 exit 0
               fi
           volumeMounts:
@@ -122,8 +156,8 @@ spec:
               name: db-dir
           resources:
             limits:
-              cpu: "2"
-              memory: "2Gi"
+              cpu: "4"
+              memory: "4Gi"
             requests:
               cpu: "1"
               memory: "1Gi"
