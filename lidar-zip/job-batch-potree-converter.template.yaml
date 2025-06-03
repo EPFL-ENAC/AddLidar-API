@@ -88,11 +88,12 @@ spec:
                 START_TIME=$(date +%s)
                 
                 # Set environment variables required by entrypoint.sh
+                export INPUT_DIR="/lidar/${MISSION_KEY}/"
                 export INPUT_FILE
                 export OUTPUT_DIR="/potree/${MISSION_KEY}"
                 export EXTRA_ARGS="--overwrite"
                 
-                echo "Converting metacloud file: ${INPUT_FILE} for mission ${MISSION_KEY}"
+                echo "Converting metacloud file: ${INPUT_FILE} for mission ${MISSION_KEY} from ${INPUT_DIR}"
                 echo "Output directory: ${OUTPUT_DIR}"
                 
                 # Run the entrypoint script and capture exit code
