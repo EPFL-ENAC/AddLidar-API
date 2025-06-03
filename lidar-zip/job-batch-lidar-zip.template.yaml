@@ -57,6 +57,7 @@ spec:
               else
                 echo "WARNING: Folder /lidar/${folder_name} does not exist or is empty"
                 echo "false" > /data/folder_valid.txt
+                echo "${folder_name}" > /data/input_path.txt
               fi
           volumeMounts:
             - name: fts-addlidar
@@ -136,7 +137,7 @@ spec:
                   echo "Database updated with failed status for invalid folder ${INPUT_PATH}" || \
                   echo "Failed to update database for ${INPUT_PATH}"
                 else
-                  echo "No input path available - critical error in job setup"
+                  echo "No input path available"
                   exit 1
                 fi
                 
