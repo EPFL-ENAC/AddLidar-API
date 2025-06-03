@@ -313,7 +313,7 @@ def scan_for_metacloud_files(
                     f"Fingerprint change detected in .metacloud file for mission {level1}"
                 )
                 needs_processing = True
-            elif row[1] != "success":
+            elif row[1] in ("pending", "failed", None):
                 logger.info(
                     f"Incomplete processing detected for .metacloud file in mission {level1} (status: {row[1]})"
                 )

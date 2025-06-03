@@ -143,7 +143,7 @@ spec:
                   echo "Updating database for ${MISSION_KEY} with failed status (invalid/missing metacloud file)"
                   TIMESTAMP=$(date +%s)
                   sqlite3 "{{ db_path }}" \
-                    "UPDATE potree_metacloud_state SET last_processed = ${TIMESTAMP}, processing_status = 'failed', processing_time = 0, error_message = 'Metacloud file is invalid or missing' WHERE mission_key = '${MISSION_KEY}';" && \
+                    "UPDATE potree_metacloud_state SET last_processed = ${TIMESTAMP}, processing_status = 'empty', processing_time = 0, error_message = 'Metacloud file is invalid or missing' WHERE mission_key = '${MISSION_KEY}';" && \
                   echo "Database updated with failed status for invalid metacloud file ${MISSION_KEY}" || \
                   echo "Failed to update database for ${MISSION_KEY}"
                 else

@@ -133,7 +133,7 @@ spec:
                   echo "Updating database for ${INPUT_PATH} with failed status (invalid/empty folder)"
                   TIMESTAMP=$(date +%s)
                   sqlite3 "{{ db_path }}" \
-                    "UPDATE folder_state SET last_processed = ${TIMESTAMP}, processing_status = 'failed', processing_time = 0, error_message = 'Folder is invalid or empty' WHERE folder_key = '${INPUT_PATH}';" && \
+                    "UPDATE folder_state SET last_processed = ${TIMESTAMP}, processing_status = 'empty', processing_time = 0, error_message = 'Folder is invalid or empty' WHERE folder_key = '${INPUT_PATH}';" && \
                   echo "Database updated with failed status for invalid folder ${INPUT_PATH}" || \
                   echo "Failed to update database for ${INPUT_PATH}"
                 else
